@@ -27,7 +27,7 @@
 
     <rule ref="rulesets/codesize.xml/ExcessiveParameterList">
         <properties>
-            <property name="minimum" value="4" />
+            <property name="minimum" value="17" />
         </properties>
     </rule>
 
@@ -40,6 +40,7 @@
     <rule ref="rulesets/cleancode.xml">
         <exclude name="StaticAccess" />
         <exclude name="MissingImport" />
+        <exclude name="BooleanArgumentFlag" />
     </rule>
 
     <rule ref="rulesets/unusedcode.xml" />

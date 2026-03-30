@@ -1,0 +1,86 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Langfuse\Dto;
+
+use Langfuse\Contracts\SerializableInterface;
+use Langfuse\Enums\ObservationLevel;
+
+readonly class GenerationBody implements SerializableInterface
+{
+    /**
+     * @param array<string, mixed>|null $metadata
+     * @param array<string, mixed>|null $modelParameters
+     */
+    public function __construct(
+        public string $id,
+        public ?string $traceId = null,
+        public ?string $name = null,
+        public ?string $startTime = null,
+        public ?string $endTime = null,
+        public ?string $completionStartTime = null,
+        public mixed $input = null,
+        public mixed $output = null,
+        public ?array $metadata = null,
+        public ?ObservationLevel $level = null,
+        public ?string $statusMessage = null,
+        public ?string $parentObservationId = null,
+        public ?string $version = null,
+        public ?string $model = null,
+        public ?array $modelParameters = null,
+        public ?Usage $usage = null,
+    ) {}
+
+    public function withTraceId(string $traceId): self
+    {
+        return $this->withContext($traceId, $this->parentObservationId);
+    }
+
+    public function withContext(string $traceId, ?string $parentObservationId): self
+    {
+        return new self(
+            id: $this->id,
+            traceId: $traceId,
+            name: $this->name,
+            startTime: $this->startTime,
+            endTime: $this->endTime,
+            completionStartTime: $this->completionStartTime,
+            input: $this->input,
+            output: $this->output,
+            metadata: $this->metadata,
+            level: $this->level,
+            statusMessage: $this->statusMessage,
+            parentObservationId: $parentObservationId,
+            version: $this->version,
+            model: $this->model,
+            modelParameters: $this->modelParameters,
+            usage: $this->usage,
+        );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function toArray(): array
+    {
+        return array_filter([
+            'id' => $this->id,
+            'traceId' => $this->traceId,
+            'name' => $this->name,
+            'startTime' => $this->startTime,
+            'endTime' => $this->endTime,
+            'completionStartTime' => $this->completionStartTime,
+            'input' => $this->input,
+            'output' => $this->output,
+            'metadata' => $this->metadata,
+            'level' => $this->level?->value,
+            'statusMessage' => $this->statusMessage,
+            'parentObservationId' => $this->parentObservationId,
+            'version' => $this->version,
+            'model' => $this->model,
+            'modelParameters' => $this->modelParameters,
+            'usage' => $this->usage?->toArray() ?: null,
+        ], fn(mixed $value): bool => $value !== null);
+    }
+}

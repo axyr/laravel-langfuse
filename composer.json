@@ -3,7 +3,10 @@
     "description": "Langfuse PHP SDK for Laravel",
     "type": "library",
     "require": {
-        "php": "^8.4"
+        "php": "^8.4",
+        "illuminate/contracts": "^11.0|^12.0",
+        "illuminate/http": "^11.0|^12.0",
+        "illuminate/support": "^11.0|^12.0"
     },
     "license": "MIT",
     "autoload": {
@@ -30,5 +33,15 @@
         "sort-packages": true
     },
     "minimum-stability": "stable",
-    "prefer-stable": true
+    "prefer-stable": true,
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Langfuse\\LangfuseServiceProvider"
+            ],
+            "aliases": {
+                "Langfuse": "Langfuse\\LangfuseFacade"
+            }
+        }
+    }
 }
