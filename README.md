@@ -1,4 +1,6 @@
-# Langfuse PHP SDK for Laravel
+# Laravel Langfuse
+
+[![CI](https://github.com/axyr/laravel-langfuse/actions/workflows/ci.yml/badge.svg)](https://github.com/axyr/laravel-langfuse/actions/workflows/ci.yml)
 
 A Laravel package for integrating with [Langfuse](https://langfuse.com) - the open-source LLM observability platform. Track traces, spans, generations, events, and scores from your Laravel application with minimal setup.
 
@@ -14,8 +16,8 @@ Langfuse solves this by providing a tracing and analytics platform purpose-built
 - **Nested observations** - organize work into traces, spans, and generations with automatic parent-child relationships
 - **Generation tracking** - record model name, parameters, token usage, and costs for each LLM call
 - **Scoring** - attach numeric, boolean, or categorical quality scores to traces and observations
-- **Prompt management** - fetch, cache, and compile prompts from Langfuse with stale-while-revalidate caching and fallback support
-- **Prism integration** - optional auto-instrumentation for [Prism](https://github.com/prism-php/prism) LLM calls
+- **Prompt management** - fetch, cache, create, and compile prompts from Langfuse with stale-while-revalidate caching and fallback support
+- **[Prism integration](#prism-integration)** - zero-code auto-instrumentation for [Prism](https://github.com/prism-php/prism) LLM calls - just set `LANGFUSE_PRISM_ENABLED=true`
 - **Per-request trace context** - optional middleware auto-creates a request trace; all Prism calls nest under it
 - **Automatic batching** - events are queued and sent in batches to minimize HTTP overhead
 - **Octane compatible** - scoped bindings reset state per request in long-running processes
@@ -31,16 +33,8 @@ Langfuse solves this by providing a tracing and analytics platform purpose-built
 
 ## Installation
 
-Install via Composer:
-
 ```bash
 composer require axyr/laravel-langfuse
-```
-
-Publish the configuration file:
-
-```bash
-php artisan vendor:publish --tag=langfuse-config
 ```
 
 Add your Langfuse credentials to `.env`:
@@ -49,6 +43,32 @@ Add your Langfuse credentials to `.env`:
 LANGFUSE_PUBLIC_KEY=pk-lf-...
 LANGFUSE_SECRET_KEY=sk-lf-...
 ```
+
+Optionally publish the configuration file:
+
+```bash
+php artisan vendor:publish --tag=langfuse-config
+```
+
+## Quick start
+
+```php
+use Axyr\Langfuse\LangfuseFacade as Langfuse;
+use Axyr\Langfuse\Dto\TraceBody;
+use Axyr\Langfuse\Dto\GenerationBody;
+
+$trace = Langfuse::trace(new TraceBody(name: 'my-first-trace'));
+
+$generation = $trace->generation(new GenerationBody(
+    name: 'chat',
+    model: 'gpt-4',
+    input: [['role' => 'user', 'content' => 'Hello!']],
+));
+
+$generation->end(output: 'Hi there!');
+```
+
+That's it - events are batched and flushed automatically.
 
 ## Configuration
 
@@ -66,6 +86,18 @@ All configuration lives in `config/langfuse.php` and can be overridden via envir
 | `LANGFUSE_PRISM_ENABLED` | `false` | Enable automatic Prism LLM call tracing |
 
 ## Usage
+
+### Prism integration
+
+If you use [Prism](https://github.com/prism-php/prism) for LLM calls, enable automatic tracing with a single environment variable:
+
+```env
+LANGFUSE_PRISM_ENABLED=true
+```
+
+When enabled, the SDK wraps Prism's provider layer to automatically create traces and generations for every `text()`, `structured()`, and `stream()` call - including model parameters, token usage, and error tracking. No code changes required. Other Prism methods (`embeddings()`, `images()`, etc.) are passed through without tracing.
+
+Multiple Prism calls within the same request share a single trace. If you use `LangfuseMiddleware`, Prism generations nest under the request trace automatically.
 
 ### Basic trace
 
@@ -89,6 +121,18 @@ $trace = Langfuse::trace(new TraceBody(
 ```
 
 All fields except `name` are optional. The `id` and `timestamp` are auto-generated but can be overridden. Use `$trace->getId()` to retrieve the trace ID.
+
+### Updating a trace
+
+Add output, metadata, or other fields to a trace after the response is generated using `update()`. The trace ID is preserved - Langfuse merges the update with the original trace:
+
+```php
+$trace->update(new TraceBody(
+    output: 'The final response text',
+    metadata: ['tokens' => 150, 'cached' => false],
+    tags: ['completed'],
+));
+```
 
 ### Tracking an LLM generation
 
@@ -236,6 +280,9 @@ Langfuse::score(new ScoreBody(
     sessionId: 'session-abc',
     environment: 'production',
 ));
+
+// Delete a score
+Langfuse::deleteScore('score-id');
 ```
 
 ### Error tracking
@@ -339,21 +386,33 @@ $prompt = Langfuse::prompt('movie-critic');
 $generation = $trace->generation(new GenerationBody(
     name: 'review',
     model: 'gpt-4',
-    metadata: $prompt->toLinkMetadata(),
+    promptName: $prompt->getName(),
+    promptVersion: $prompt->getVersion(),
 ));
 ```
 
-### Prism integration
+### Creating and listing prompts
 
-If you use [Prism](https://github.com/prism-php/prism) for LLM calls, enable automatic tracing with a single environment variable:
+```php
+use Axyr\Langfuse\Dto\CreatePromptBody;
 
-```env
-LANGFUSE_PRISM_ENABLED=true
+// Create a new prompt
+$prompt = Langfuse::createPrompt(new CreatePromptBody(
+    name: 'movie-critic',
+    type: 'text',
+    prompt: 'Review {{movie}} in one paragraph.',
+    labels: ['staging'],
+));
+
+// List prompts with optional filters
+$response = Langfuse::listPrompts(name: 'movie', label: 'production', page: 1, limit: 10);
+
+foreach ($response->data as $item) {
+    echo "{$item->name} v{$item->version} ({$item->type})\n";
+}
+
+echo "Total: {$response->meta->totalItems}";
 ```
-
-When enabled, the SDK wraps Prism's provider layer to automatically create traces and generations for every `text()`, `structured()`, and `stream()` call - including model parameters, token usage, and error tracking. No code changes required. Other Prism methods (`embeddings()`, `images()`, etc.) are passed through without tracing.
-
-Multiple Prism calls within the same request share a single trace. If you use `LangfuseMiddleware`, Prism generations nest under the request trace automatically.
 
 ### Octane compatibility
 
@@ -361,7 +420,9 @@ The SDK is compatible with Laravel Octane and other long-running process servers
 
 No additional configuration is needed - it works out of the box with Octane, RoadRunner, and FrankenPHP.
 
-### Testing with fakes
+## Testing
+
+### Using fakes
 
 The SDK provides a testing double that records events without making HTTP calls:
 
@@ -386,6 +447,8 @@ $fake->assertTraceCreated('test')
 $fake->assertSpanCreated('name');
 $fake->assertScoreCreated('name');
 $fake->assertEventCreated('name');
+$fake->assertScoreDeleted('score-id');
+$fake->assertPromptCreated('name');
 $fake->assertNothingSent();
 
 // Access raw recorded events for custom assertions
@@ -404,40 +467,72 @@ $prompt = Langfuse::prompt('test');
 $prompt->compile(['name' => 'World']); // "Hello World"
 ```
 
-### Disabling in tests
+### Disabling tracing in tests
 
 Set `LANGFUSE_ENABLED=false` in your `.env.testing` to silently disable all tracing. The SDK substitutes a no-op batcher - no events are queued or sent, and no code changes are needed.
 
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────┐
-│  Your Application                                │
-│                                                  │
-│  Langfuse::trace()  →  LangfuseTrace             │
-│                         ├── span()  →  LangfuseSpan
-│                         ├── generation() → LangfuseGeneration
-│                         ├── event()                │
-│                         └── score()                │
-└───────────────┬──────────────────────────────────┘
-                │ enqueue(IngestionEvent)
-                ▼
-        ┌───────────────┐
-        │  EventBatcher │  queues events, auto-flushes at threshold
-        └───────┬───────┘
-                │ send(IngestionBatch)
-                ▼
-     ┌─────────────────────┐
-     │  IngestionApiClient │  HTTP POST to Langfuse API
-     └─────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│  Your Application                                       │
+│                                                         │
+│  Langfuse::trace()  →  LangfuseTrace                   │
+│                         ├── span()  →  LangfuseSpan     │
+│                         ├── generation() → LangfuseGen  │
+│                         ├── event()                     │
+│                         ├── score()                     │
+│                         └── update()                    │
+└──────────┬──────────────────────────────────────────────┘
+           │ enqueue(IngestionEvent)
+           ▼
+   ┌───────────────┐
+   │  EventBatcher │  queues events, auto-flushes at threshold
+   └───────┬───────┘
+           │ send(IngestionBatch)
+           ▼
+┌─────────────────────┐
+│  IngestionApiClient │  HTTP POST to /api/public/ingestion
+└─────────────────────┘
+
+┌───────────────────┐     ┌──────────────┐
+│  PromptManager    │────▶│  PromptCache │  in-memory, stale-while-revalidate
+│  (fetch/compile)  │     └──────────────┘
+└────────┬──────────┘
+         │ GET/POST /api/public/v2/prompts
+         ▼
+┌─────────────────────┐
+│  PromptApiClient    │
+└─────────────────────┘
+
+┌─────────────────────┐
+│  ScoreApiClient     │  DELETE /api/public/scores/{id}
+└─────────────────────┘
+
+┌───────────────────────────┐
+│  TracingPrismManager      │  wraps Prism's PrismManager
+│  └── TracingProvider      │  wraps each Provider for auto-tracing
+└───────────────────────────┘
+
+┌───────────────────────────┐
+│  LangfuseMiddleware       │  auto-creates per-request trace
+└───────────────────────────┘
+
+┌───────────────────────────┐
+│  LangfuseFake             │  test double with assertion helpers
+│  └── RecordingEventBatcher│
+└───────────────────────────┘
 ```
 
 All DTOs are immutable readonly classes with auto-generated IDs and timestamps. API and batching failures are caught and logged - they never propagate exceptions to your application.
 
-## Testing
+## Contributing
+
+Contributions are welcome. Please open an issue first to discuss what you'd like to change.
 
 ```bash
-composer test
+composer test        # Run tests
+composer pint        # Fix code style
 ```
 
 ## License
