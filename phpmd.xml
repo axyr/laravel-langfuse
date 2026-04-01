@@ -27,7 +27,7 @@
 
     <rule ref="rulesets/codesize.xml/ExcessiveParameterList">
         <properties>
-            <property name="minimum" value="17" />
+            <property name="minimum" value="20" />
         </properties>
     </rule>
 
