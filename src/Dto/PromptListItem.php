@@ -21,11 +21,23 @@ readonly class PromptListItem
      */
     public static function fromArray(array $data): self
     {
+        /** @var string $name */
+        $name = $data['name'] ?? '';
+
+        /** @var int $version */
+        $version = $data['version'] ?? 1;
+
+        /** @var string $type */
+        $type = $data['type'] ?? 'text';
+
+        /** @var array<string> $labels */
+        $labels = $data['labels'] ?? [];
+
         return new self(
-            name: (string) ($data['name'] ?? ''),
-            version: (int) ($data['version'] ?? 1),
-            type: (string) ($data['type'] ?? 'text'),
-            labels: (array) ($data['labels'] ?? []),
+            name: $name,
+            version: $version,
+            type: $type,
+            labels: $labels,
         );
     }
 }

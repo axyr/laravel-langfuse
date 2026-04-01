@@ -22,12 +22,15 @@ readonly class PromptListResponse
         /** @var array<int, array<string, mixed>> $items */
         $items = $data['data'] ?? [];
 
+        /** @var array<string, mixed> $meta */
+        $meta = $data['meta'] ?? [];
+
         return new self(
             data: array_map(
                 fn(array $item): PromptListItem => PromptListItem::fromArray($item),
                 $items,
             ),
-            meta: PromptListMeta::fromArray($data['meta'] ?? []),
+            meta: PromptListMeta::fromArray($meta),
         );
     }
 }

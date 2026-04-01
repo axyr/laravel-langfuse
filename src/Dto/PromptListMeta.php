@@ -18,11 +18,23 @@ readonly class PromptListMeta
      */
     public static function fromArray(array $data): self
     {
+        /** @var int $totalItems */
+        $totalItems = $data['totalItems'] ?? 0;
+
+        /** @var int $totalPages */
+        $totalPages = $data['totalPages'] ?? 0;
+
+        /** @var int $page */
+        $page = $data['page'] ?? 1;
+
+        /** @var int $limit */
+        $limit = $data['limit'] ?? 10;
+
         return new self(
-            totalItems: (int) ($data['totalItems'] ?? 0),
-            totalPages: (int) ($data['totalPages'] ?? 0),
-            page: (int) ($data['page'] ?? 1),
-            limit: (int) ($data['limit'] ?? 10),
+            totalItems: $totalItems,
+            totalPages: $totalPages,
+            page: $page,
+            limit: $limit,
         );
     }
 }
