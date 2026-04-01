@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Langfuse\Objects;
+namespace Axyr\Langfuse\Objects;
 
-use Langfuse\Concerns\CreatesIngestionEvents;
-use Langfuse\Contracts\EventBatcherInterface;
-use Langfuse\Dto\GenerationBody;
-use Langfuse\Dto\Usage;
-use Langfuse\Enums\EventType;
-use Langfuse\Enums\ObservationLevel;
+use Axyr\Langfuse\Concerns\CreatesIngestionEvents;
+use Axyr\Langfuse\Contracts\EventBatcherInterface;
+use Axyr\Langfuse\Dto\GenerationBody;
+use Axyr\Langfuse\Dto\Usage;
+use Axyr\Langfuse\Enums\EventType;
+use Axyr\Langfuse\Enums\ObservationLevel;
 
 class LangfuseGeneration
 {

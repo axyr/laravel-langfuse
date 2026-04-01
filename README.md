@@ -72,8 +72,8 @@ All configuration lives in `config/langfuse.php` and can be overridden via envir
 IDs and timestamps are auto-generated - just pass the fields you care about:
 
 ```php
-use Langfuse\LangfuseFacade as Langfuse;
-use Langfuse\Dto\TraceBody;
+use Axyr\Langfuse\LangfuseFacade as Langfuse;
+use Axyr\Langfuse\Dto\TraceBody;
 
 $trace = Langfuse::trace(new TraceBody(
     name: 'chat-request',
@@ -93,8 +93,8 @@ All fields except `name` are optional. The `id` and `timestamp` are auto-generat
 ### Tracking an LLM generation
 
 ```php
-use Langfuse\Dto\GenerationBody;
-use Langfuse\Dto\Usage;
+use Axyr\Langfuse\Dto\GenerationBody;
+use Axyr\Langfuse\Dto\Usage;
 
 $generation = $trace->generation(new GenerationBody(
     name: 'chat-completion',
@@ -141,7 +141,7 @@ $generation->end(
 Use spans to track any operation within a trace - database queries, API calls, processing steps:
 
 ```php
-use Langfuse\Dto\SpanBody;
+use Axyr\Langfuse\Dto\SpanBody;
 
 $span = $trace->span(new SpanBody(
     name: 'retrieve-context',
@@ -193,7 +193,7 @@ $completionGen->end(
 Lightweight observations for logging discrete moments without a start/end lifecycle. The `id` and `startTime` are auto-generated:
 
 ```php
-use Langfuse\Dto\EventBody;
+use Axyr\Langfuse\Dto\EventBody;
 
 $trace->event(new EventBody(
     name: 'cache-hit',
@@ -208,8 +208,8 @@ $trace->event(new EventBody(
 Attach quality metrics to traces or specific observations. Supports `NUMERIC`, `BOOLEAN`, and `CATEGORICAL` data types:
 
 ```php
-use Langfuse\Dto\ScoreBody;
-use Langfuse\Enums\ScoreDataType;
+use Axyr\Langfuse\Dto\ScoreBody;
+use Axyr\Langfuse\Enums\ScoreDataType;
 
 // Score on a trace
 $trace->score(new ScoreBody(
@@ -243,7 +243,7 @@ Langfuse::score(new ScoreBody(
 Mark failed operations with a level and status message. Available levels are `DEBUG`, `DEFAULT`, `WARNING`, and `ERROR`:
 
 ```php
-use Langfuse\Enums\ObservationLevel;
+use Axyr\Langfuse\Enums\ObservationLevel;
 
 $generation->end(
     level: ObservationLevel::ERROR,
@@ -275,7 +275,7 @@ The optional `LangfuseMiddleware` auto-creates a trace for each HTTP request. Al
 
 ```php
 // In your route file or middleware group:
-use Langfuse\Http\Middleware\LangfuseMiddleware;
+use Axyr\Langfuse\Http\Middleware\LangfuseMiddleware;
 
 Route::middleware(LangfuseMiddleware::class)->group(function () {
     Route::post('/chat', ChatController::class);
@@ -300,7 +300,7 @@ Use `Langfuse::currentTrace()` to retrieve the current request trace (returns `n
 Fetch prompts from your Langfuse project, with built-in caching and fallback support:
 
 ```php
-use Langfuse\LangfuseFacade as Langfuse;
+use Axyr\Langfuse\LangfuseFacade as Langfuse;
 
 // Fetch and compile a text prompt
 $prompt = Langfuse::prompt('movie-critic');
@@ -366,9 +366,9 @@ No additional configuration is needed - it works out of the box with Octane, Roa
 The SDK provides a testing double that records events without making HTTP calls:
 
 ```php
-use Langfuse\Dto\GenerationBody;
-use Langfuse\Dto\TraceBody;
-use Langfuse\LangfuseFacade as Langfuse;
+use Axyr\Langfuse\Dto\GenerationBody;
+use Axyr\Langfuse\Dto\TraceBody;
+use Axyr\Langfuse\LangfuseFacade as Langfuse;
 
 // In your test
 $fake = Langfuse::fake();
@@ -395,7 +395,7 @@ $events = $fake->events();
 You can also pre-configure prompt responses for the fake:
 
 ```php
-use Langfuse\Dto\TextPrompt;
+use Axyr\Langfuse\Dto\TextPrompt;
 
 $fake = Langfuse::fake();
 $fake->withPrompt(new TextPrompt(name: 'test', version: 1, prompt: 'Hello {{name}}'));

@@ -2,20 +2,22 @@
 
 declare(strict_types=1);
 
-namespace Langfuse;
+namespace Axyr\Langfuse;
 
-use Langfuse\Concerns\CreatesIngestionEvents;
-use Langfuse\Config\LangfuseConfig;
-use Langfuse\Contracts\EventBatcherInterface;
-use Langfuse\Contracts\LangfuseClientInterface;
-use Langfuse\Contracts\PromptApiClientInterface;
-use Langfuse\Contracts\PromptInterface;
-use Langfuse\Contracts\ScoreApiClientInterface;
-use Langfuse\Dto\ScoreBody;
-use Langfuse\Dto\TraceBody;
-use Langfuse\Enums\EventType;
-use Langfuse\Objects\LangfuseTrace;
-use Langfuse\Prompt\PromptManager;
+use Axyr\Langfuse\Concerns\CreatesIngestionEvents;
+use Axyr\Langfuse\Config\LangfuseConfig;
+use Axyr\Langfuse\Contracts\EventBatcherInterface;
+use Axyr\Langfuse\Contracts\LangfuseClientInterface;
+use Axyr\Langfuse\Contracts\PromptApiClientInterface;
+use Axyr\Langfuse\Contracts\PromptInterface;
+use Axyr\Langfuse\Contracts\ScoreApiClientInterface;
+use Axyr\Langfuse\Dto\CreatePromptBody;
+use Axyr\Langfuse\Dto\PromptListResponse;
+use Axyr\Langfuse\Dto\ScoreBody;
+use Axyr\Langfuse\Dto\TraceBody;
+use Axyr\Langfuse\Enums\EventType;
+use Axyr\Langfuse\Objects\LangfuseTrace;
+use Axyr\Langfuse\Prompt\PromptManager;
 
 class LangfuseClient implements LangfuseClientInterface
 {
@@ -81,19 +83,12 @@ class LangfuseClient implements LangfuseClientInterface
         return $this->promptManager->get($name, $version, $label, $fallback);
     }
 
-    /**
-     * @param array<string, mixed> $prompt
-     * @return array<string, mixed>|null
-     */
-    public function createPrompt(array $prompt): ?array
+    public function createPrompt(CreatePromptBody $body): ?PromptInterface
     {
-        return $this->promptApiClient->create($prompt);
+        return $this->promptApiClient->create($body);
     }
 
-    /**
-     * @return array<string, mixed>|null
-     */
-    public function listPrompts(?string $name = null, ?string $label = null, ?int $page = null, ?int $limit = null): ?array
+    public function listPrompts(?string $name = null, ?string $label = null, ?int $page = null, ?int $limit = null): ?PromptListResponse
     {
         return $this->promptApiClient->list($name, $label, $page, $limit);
     }

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Langfuse\Enums;
+namespace Axyr\Langfuse\Enums;
 
 enum EventType: string
 {

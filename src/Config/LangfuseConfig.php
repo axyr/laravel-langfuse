@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Langfuse\Config;
+namespace Axyr\Langfuse\Config;
 
 readonly class LangfuseConfig
 {

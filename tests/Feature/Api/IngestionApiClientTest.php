@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
+use Axyr\Langfuse\Api\IngestionApiClient;
+use Axyr\Langfuse\Config\LangfuseConfig;
+use Axyr\Langfuse\Dto\IngestionBatch;
+use Axyr\Langfuse\Dto\IngestionEvent;
+use Axyr\Langfuse\Dto\IngestionResponse;
+use Axyr\Langfuse\Dto\TraceBody;
+use Axyr\Langfuse\Enums\EventType;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Langfuse\Api\IngestionApiClient;
-use Langfuse\Config\LangfuseConfig;
-use Langfuse\Dto\IngestionBatch;
-use Langfuse\Dto\IngestionEvent;
-use Langfuse\Dto\IngestionResponse;
-use Langfuse\Dto\TraceBody;
-use Langfuse\Enums\EventType;
 
 beforeEach(function () {
     $this->config = new LangfuseConfig(

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use Langfuse\Enums\EventType;
+use Axyr\Langfuse\Enums\EventType;
 
 it('has 7 cases', function () {
     expect(EventType::cases())->toHaveCount(7);

@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-use Langfuse\Dto\ChatPrompt;
-use Langfuse\Dto\PromptFactory;
-use Langfuse\Dto\TextPrompt;
+use Axyr\Langfuse\Dto\ChatPrompt;
+use Axyr\Langfuse\Dto\PromptFactory;
+use Axyr\Langfuse\Dto\TextPrompt;
 
 it('creates text prompt from api response', function () {
     $prompt = PromptFactory::fromApiResponse([

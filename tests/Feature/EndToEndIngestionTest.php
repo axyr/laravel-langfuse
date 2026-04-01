@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
+use Axyr\Langfuse\Dto\EventBody;
+use Axyr\Langfuse\Dto\GenerationBody;
+use Axyr\Langfuse\Dto\ScoreBody;
+use Axyr\Langfuse\Dto\SpanBody;
+use Axyr\Langfuse\Dto\TraceBody;
+use Axyr\Langfuse\Dto\Usage;
+use Axyr\Langfuse\Enums\ScoreDataType;
+use Axyr\Langfuse\LangfuseFacade;
 use Illuminate\Support\Facades\Http;
-use Langfuse\Dto\EventBody;
-use Langfuse\Dto\GenerationBody;
-use Langfuse\Dto\ScoreBody;
-use Langfuse\Dto\SpanBody;
-use Langfuse\Dto\TraceBody;
-use Langfuse\Dto\Usage;
-use Langfuse\Enums\ScoreDataType;
-use Langfuse\LangfuseFacade;
 
 beforeEach(function () {
     config([
@@ -22,10 +22,10 @@ beforeEach(function () {
     ]);
 
     // Reset singletons with new config
-    $this->app->forgetInstance(\Langfuse\Config\LangfuseConfig::class);
-    $this->app->forgetInstance(\Langfuse\Contracts\EventBatcherInterface::class);
-    $this->app->forgetInstance(\Langfuse\Contracts\IngestionApiClientInterface::class);
-    $this->app->forgetInstance(\Langfuse\Contracts\LangfuseClientInterface::class);
+    $this->app->forgetInstance(\Axyr\Langfuse\Config\LangfuseConfig::class);
+    $this->app->forgetInstance(\Axyr\Langfuse\Contracts\EventBatcherInterface::class);
+    $this->app->forgetInstance(\Axyr\Langfuse\Contracts\IngestionApiClientInterface::class);
+    $this->app->forgetInstance(\Axyr\Langfuse\Contracts\LangfuseClientInterface::class);
 });
 
 it('sends complete trace with nested observations on flush', function () {

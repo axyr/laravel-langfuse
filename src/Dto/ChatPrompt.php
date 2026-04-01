@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Langfuse\Dto;
+namespace Axyr\Langfuse\Dto;
 
-use Langfuse\Contracts\PromptInterface;
+use Axyr\Langfuse\Contracts\PromptInterface;
 
 readonly class ChatPrompt implements PromptInterface
 {

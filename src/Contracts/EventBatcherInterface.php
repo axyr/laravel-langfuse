@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Langfuse\Contracts;
+namespace Axyr\Langfuse\Contracts;
 
-use Langfuse\Dto\IngestionEvent;
+use Axyr\Langfuse\Dto\IngestionEvent;
 
 interface EventBatcherInterface
 {

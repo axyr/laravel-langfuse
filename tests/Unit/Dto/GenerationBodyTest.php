@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-use Langfuse\Dto\GenerationBody;
-use Langfuse\Dto\Usage;
-use Langfuse\Enums\ObservationLevel;
+use Axyr\Langfuse\Dto\GenerationBody;
+use Axyr\Langfuse\Dto\Usage;
+use Axyr\Langfuse\Enums\ObservationLevel;
 
 it('auto-generates id when not provided', function () {
     $gen = new GenerationBody();
@@ -130,7 +130,7 @@ it('includes new fields in serialization', function () {
 it('implements SerializableInterface', function () {
     $gen = new GenerationBody(id: 'gen-1');
 
-    expect($gen)->toBeInstanceOf(\Langfuse\Contracts\SerializableInterface::class);
+    expect($gen)->toBeInstanceOf(\Axyr\Langfuse\Contracts\SerializableInterface::class);
 });
 
 it('includes empty usage in serialization when explicitly set', function () {

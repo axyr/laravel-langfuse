@@ -2,24 +2,24 @@
 
 declare(strict_types=1);
 
-namespace Langfuse;
+namespace Axyr\Langfuse;
 
+use Axyr\Langfuse\Api\IngestionApiClient;
+use Axyr\Langfuse\Api\PromptApiClient;
+use Axyr\Langfuse\Api\ScoreApiClient;
+use Axyr\Langfuse\Batch\EventBatcher;
+use Axyr\Langfuse\Batch\NullEventBatcher;
+use Axyr\Langfuse\Cache\PromptCache;
+use Axyr\Langfuse\Config\LangfuseConfig;
+use Axyr\Langfuse\Contracts\EventBatcherInterface;
+use Axyr\Langfuse\Contracts\IngestionApiClientInterface;
+use Axyr\Langfuse\Contracts\LangfuseClientInterface;
+use Axyr\Langfuse\Contracts\PromptApiClientInterface;
+use Axyr\Langfuse\Contracts\PromptCacheInterface;
+use Axyr\Langfuse\Contracts\ScoreApiClientInterface;
+use Axyr\Langfuse\Prompt\PromptManager;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\ServiceProvider;
-use Langfuse\Api\IngestionApiClient;
-use Langfuse\Api\PromptApiClient;
-use Langfuse\Api\ScoreApiClient;
-use Langfuse\Batch\EventBatcher;
-use Langfuse\Batch\NullEventBatcher;
-use Langfuse\Cache\PromptCache;
-use Langfuse\Config\LangfuseConfig;
-use Langfuse\Contracts\EventBatcherInterface;
-use Langfuse\Contracts\IngestionApiClientInterface;
-use Langfuse\Contracts\LangfuseClientInterface;
-use Langfuse\Contracts\PromptApiClientInterface;
-use Langfuse\Contracts\PromptCacheInterface;
-use Langfuse\Contracts\ScoreApiClientInterface;
-use Langfuse\Prompt\PromptManager;
 
 class LangfuseServiceProvider extends ServiceProvider
 {

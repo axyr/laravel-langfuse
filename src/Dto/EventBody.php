@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Langfuse\Dto;
+namespace Axyr\Langfuse\Dto;
 
-use Langfuse\Contracts\SerializableInterface;
-use Langfuse\Enums\ObservationLevel;
+use Axyr\Langfuse\Contracts\SerializableInterface;
+use Axyr\Langfuse\Enums\ObservationLevel;
 
 readonly class EventBody implements SerializableInterface
 {

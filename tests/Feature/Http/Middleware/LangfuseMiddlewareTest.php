@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
+use Axyr\Langfuse\Http\Middleware\LangfuseMiddleware;
+use Axyr\Langfuse\LangfuseFacade as Langfuse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
-use Langfuse\Http\Middleware\LangfuseMiddleware;
-use Langfuse\LangfuseFacade as Langfuse;
 
 it('creates a trace for the request', function () {
     $fake = Langfuse::fake();
@@ -48,7 +48,7 @@ it('skips trace creation when disabled', function () {
     config(['langfuse.enabled' => false]);
 
     $this->app->forgetScopedInstances();
-    $this->app->forgetInstance(\Langfuse\Config\LangfuseConfig::class);
+    $this->app->forgetInstance(\Axyr\Langfuse\Config\LangfuseConfig::class);
 
     $middleware = app(LangfuseMiddleware::class);
     $request = Request::create('/test', 'GET');

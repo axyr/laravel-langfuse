@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use Langfuse\Dto\TraceBody;
+use Axyr\Langfuse\Dto\TraceBody;
 
 it('auto-generates id when not provided', function () {
     $trace = new TraceBody();
@@ -99,5 +99,5 @@ it('includes environment in serialization', function () {
 it('implements SerializableInterface', function () {
     $trace = new TraceBody(id: 'trace-1');
 
-    expect($trace)->toBeInstanceOf(\Langfuse\Contracts\SerializableInterface::class);
+    expect($trace)->toBeInstanceOf(\Axyr\Langfuse\Contracts\SerializableInterface::class);
 });

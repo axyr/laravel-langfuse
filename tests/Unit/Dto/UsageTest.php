@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use Langfuse\Dto\Usage;
+use Axyr\Langfuse\Dto\Usage;
 
 it('can be constructed with no fields', function () {
     $usage = new Usage();

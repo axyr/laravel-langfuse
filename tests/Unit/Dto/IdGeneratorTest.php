@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use Langfuse\Dto\IdGenerator;
+use Axyr\Langfuse\Dto\IdGenerator;
 
 it('generates valid uuid v4 format', function () {
     $uuid = IdGenerator::uuid();

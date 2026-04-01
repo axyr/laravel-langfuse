@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
+use Axyr\Langfuse\Contracts\LangfuseClientInterface;
+use Axyr\Langfuse\Prism\TracingPrismManager;
+use Axyr\Langfuse\Prism\TracingProvider;
 use Illuminate\Contracts\Foundation\Application;
-use Langfuse\Contracts\LangfuseClientInterface;
-use Langfuse\Prism\TracingPrismManager;
-use Langfuse\Prism\TracingProvider;
 use Prism\Prism\PrismManager;
 use Prism\Prism\Providers\Provider;
 

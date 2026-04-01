@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Langfuse\Testing;
+namespace Axyr\Langfuse\Testing;
 
-use Langfuse\Contracts\EventBatcherInterface;
-use Langfuse\Dto\IngestionEvent;
+use Axyr\Langfuse\Contracts\EventBatcherInterface;
+use Axyr\Langfuse\Dto\IngestionEvent;
 
 class RecordingEventBatcher implements EventBatcherInterface
 {

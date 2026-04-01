@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-use Langfuse\Dto\EventBody;
-use Langfuse\Dto\GenerationBody;
-use Langfuse\Dto\ScoreBody;
-use Langfuse\Dto\SpanBody;
-use Langfuse\Dto\TextPrompt;
-use Langfuse\Dto\TraceBody;
-use Langfuse\Dto\Usage;
-use Langfuse\Exceptions\PromptNotFoundException;
-use Langfuse\Testing\LangfuseFake;
+use Axyr\Langfuse\Dto\EventBody;
+use Axyr\Langfuse\Dto\GenerationBody;
+use Axyr\Langfuse\Dto\ScoreBody;
+use Axyr\Langfuse\Dto\SpanBody;
+use Axyr\Langfuse\Dto\TextPrompt;
+use Axyr\Langfuse\Dto\TraceBody;
+use Axyr\Langfuse\Dto\Usage;
+use Axyr\Langfuse\Exceptions\PromptNotFoundException;
+use Axyr\Langfuse\Testing\LangfuseFake;
 
 it('records traces', function () {
     $fake = new LangfuseFake();

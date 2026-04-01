@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use Langfuse\Dto\TextPrompt;
+use Axyr\Langfuse\Dto\TextPrompt;
 
 it('compiles template with variables', function () {
     $prompt = new TextPrompt(

@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Langfuse\Objects;
+namespace Axyr\Langfuse\Objects;
 
-use Langfuse\Concerns\CreatesIngestionEvents;
-use Langfuse\Contracts\EventBatcherInterface;
-use Langfuse\Dto\EventBody;
-use Langfuse\Dto\GenerationBody;
-use Langfuse\Dto\ScoreBody;
-use Langfuse\Dto\SpanBody;
-use Langfuse\Dto\TraceBody;
-use Langfuse\Enums\EventType;
+use Axyr\Langfuse\Concerns\CreatesIngestionEvents;
+use Axyr\Langfuse\Contracts\EventBatcherInterface;
+use Axyr\Langfuse\Dto\EventBody;
+use Axyr\Langfuse\Dto\GenerationBody;
+use Axyr\Langfuse\Dto\ScoreBody;
+use Axyr\Langfuse\Dto\SpanBody;
+use Axyr\Langfuse\Dto\TraceBody;
+use Axyr\Langfuse\Enums\EventType;
 
 class LangfuseTrace
 {

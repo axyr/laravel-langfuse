@@ -2,15 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Langfuse\Testing;
+namespace Axyr\Langfuse\Testing;
 
-use Langfuse\Contracts\LangfuseClientInterface;
-use Langfuse\Contracts\PromptInterface;
-use Langfuse\Dto\IdGenerator;
-use Langfuse\Dto\IngestionEvent;
-use Langfuse\Dto\ScoreBody;
-use Langfuse\Dto\TraceBody;
-use Langfuse\Objects\LangfuseTrace;
+use Axyr\Langfuse\Contracts\LangfuseClientInterface;
+use Axyr\Langfuse\Contracts\PromptInterface;
+use Axyr\Langfuse\Dto\CreatePromptBody;
+use Axyr\Langfuse\Dto\IdGenerator;
+use Axyr\Langfuse\Dto\IngestionEvent;
+use Axyr\Langfuse\Dto\PromptListResponse;
+use Axyr\Langfuse\Dto\ScoreBody;
+use Axyr\Langfuse\Dto\TraceBody;
+use Axyr\Langfuse\Objects\LangfuseTrace;
 use PHPUnit\Framework\Assert;
 
 class LangfuseFake implements LangfuseClientInterface
@@ -25,7 +27,7 @@ class LangfuseFake implements LangfuseClientInterface
     /** @var array<string> */
     private array $deletedScores = [];
 
-    /** @var array<array<string, mixed>> */
+    /** @var array<CreatePromptBody> */
     private array $createdPrompts = [];
 
     public function __construct()
@@ -55,7 +57,7 @@ class LangfuseFake implements LangfuseClientInterface
     {
         $event = new IngestionEvent(
             id: $body->id,
-            type: \Langfuse\Enums\EventType::ScoreCreate,
+            type: \Axyr\Langfuse\Enums\EventType::ScoreCreate,
             timestamp: IdGenerator::timestamp(),
             body: $body,
         );
@@ -91,26 +93,29 @@ class LangfuseFake implements LangfuseClientInterface
         }
 
         if (is_string($fallback)) {
-            return \Langfuse\Dto\PromptFactory::fallbackText($name, $fallback);
+            return \Axyr\Langfuse\Dto\PromptFactory::fallbackText($name, $fallback);
         }
 
         if (is_array($fallback)) {
-            return \Langfuse\Dto\PromptFactory::fallbackChat($name, $fallback);
+            return \Axyr\Langfuse\Dto\PromptFactory::fallbackChat($name, $fallback);
         }
 
-        throw \Langfuse\Exceptions\PromptNotFoundException::forName($name);
+        throw \Axyr\Langfuse\Exceptions\PromptNotFoundException::forName($name);
     }
 
-    public function createPrompt(array $prompt): ?array
+    public function createPrompt(CreatePromptBody $body): ?PromptInterface
     {
-        $this->createdPrompts[] = $prompt;
+        $this->createdPrompts[] = $body;
 
-        return $prompt;
+        return \Axyr\Langfuse\Dto\PromptFactory::fromApiResponse($body->toArray());
     }
 
-    public function listPrompts(?string $name = null, ?string $label = null, ?int $page = null, ?int $limit = null): ?array
+    public function listPrompts(?string $name = null, ?string $label = null, ?int $page = null, ?int $limit = null): ?PromptListResponse
     {
-        return ['data' => [], 'meta' => ['totalItems' => 0, 'page' => $page ?? 1]];
+        return PromptListResponse::fromArray([
+            'data' => [],
+            'meta' => ['totalItems' => 0, 'totalPages' => 0, 'page' => $page ?? 1, 'limit' => $limit ?? 10],
+        ]);
     }
 
     public function withPrompt(PromptInterface $prompt): self
@@ -235,7 +240,7 @@ class LangfuseFake implements LangfuseClientInterface
         Assert::assertNotEmpty($this->createdPrompts, 'Expected at least one prompt to be created, but none were.');
 
         if ($name !== null) {
-            $names = array_map(fn(array $p): mixed => $p['name'] ?? null, $this->createdPrompts);
+            $names = array_map(fn(CreatePromptBody $p): string => $p->name, $this->createdPrompts);
             Assert::assertContains($name, $names, "Expected a prompt named '{$name}' to be created but it was not.");
         }
 

@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Langfuse\Batch;
+namespace Axyr\Langfuse\Batch;
 
-use Langfuse\Contracts\EventBatcherInterface;
-use Langfuse\Dto\IngestionEvent;
+use Axyr\Langfuse\Contracts\EventBatcherInterface;
+use Axyr\Langfuse\Dto\IngestionEvent;
 
 class NullEventBatcher implements EventBatcherInterface
 {

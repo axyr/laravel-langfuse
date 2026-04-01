@@ -14,7 +14,7 @@ abstract class TestCase extends BaseTestCase
     protected function getPackageProviders($app): array
     {
         return [
-            \Langfuse\LangfuseServiceProvider::class,
+            \Axyr\Langfuse\LangfuseServiceProvider::class,
         ];
     }
 }

@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Langfuse\Dto;
+namespace Axyr\Langfuse\Dto;
 
-use Langfuse\Contracts\SerializableInterface;
-use Langfuse\Enums\ScoreDataType;
+use Axyr\Langfuse\Contracts\SerializableInterface;
+use Axyr\Langfuse\Enums\ScoreDataType;
 
 readonly class ScoreBody implements SerializableInterface
 {

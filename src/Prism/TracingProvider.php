@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Langfuse\Prism;
+namespace Axyr\Langfuse\Prism;
 
+use Axyr\Langfuse\Contracts\LangfuseClientInterface;
+use Axyr\Langfuse\Dto\GenerationBody;
+use Axyr\Langfuse\Dto\TraceBody;
+use Axyr\Langfuse\Dto\Usage;
+use Axyr\Langfuse\Enums\ObservationLevel;
 use Generator;
 use Illuminate\Http\Client\RequestException;
-use Langfuse\Contracts\LangfuseClientInterface;
-use Langfuse\Dto\GenerationBody;
-use Langfuse\Dto\TraceBody;
-use Langfuse\Dto\Usage;
-use Langfuse\Enums\ObservationLevel;
 use Prism\Prism\Audio\AudioResponse as TextToSpeechResponse;
 use Prism\Prism\Audio\SpeechToTextRequest;
 use Prism\Prism\Audio\TextResponse as SpeechToTextResponse;
@@ -216,7 +216,7 @@ class TracingProvider extends Provider
     private function createTrace(
         TextRequest|StructuredRequest $request,
         array $extraMetadata = [],
-    ): \Langfuse\Objects\LangfuseTrace {
+    ): \Axyr\Langfuse\Objects\LangfuseTrace {
         $existing = $this->langfuse->currentTrace();
 
         if ($existing !== null) {

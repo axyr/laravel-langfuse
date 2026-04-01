@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
-use Langfuse\Batch\NullEventBatcher;
-use Langfuse\Config\LangfuseConfig;
-use Langfuse\Contracts\EventBatcherInterface;
-use Langfuse\Contracts\IngestionApiClientInterface;
-use Langfuse\Contracts\LangfuseClientInterface;
-use Langfuse\Contracts\PromptApiClientInterface;
-use Langfuse\Contracts\PromptCacheInterface;
-use Langfuse\Contracts\ScoreApiClientInterface;
-use Langfuse\LangfuseClient;
-use Langfuse\LangfuseServiceProvider;
-use Langfuse\Prompt\PromptManager;
+use Axyr\Langfuse\Batch\NullEventBatcher;
+use Axyr\Langfuse\Config\LangfuseConfig;
+use Axyr\Langfuse\Contracts\EventBatcherInterface;
+use Axyr\Langfuse\Contracts\IngestionApiClientInterface;
+use Axyr\Langfuse\Contracts\LangfuseClientInterface;
+use Axyr\Langfuse\Contracts\PromptApiClientInterface;
+use Axyr\Langfuse\Contracts\PromptCacheInterface;
+use Axyr\Langfuse\Contracts\ScoreApiClientInterface;
+use Axyr\Langfuse\LangfuseClient;
+use Axyr\Langfuse\LangfuseServiceProvider;
+use Axyr\Langfuse\Prompt\PromptManager;
 
 it('registers the service provider', function () {
     expect($this->app->getProviders(LangfuseServiceProvider::class))->not->toBeEmpty();

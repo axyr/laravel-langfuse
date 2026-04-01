@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use Langfuse\Enums\ScoreDataType;
+use Axyr\Langfuse\Enums\ScoreDataType;
 
 it('has 3 cases', function () {
     expect(ScoreDataType::cases())->toHaveCount(3);

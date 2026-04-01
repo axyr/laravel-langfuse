@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-use Langfuse\Dto\GenerationBody;
-use Langfuse\Dto\ScoreBody;
-use Langfuse\Dto\TraceBody;
-use Langfuse\LangfuseFacade;
-use Langfuse\Testing\LangfuseFake;
+use Axyr\Langfuse\Dto\GenerationBody;
+use Axyr\Langfuse\Dto\ScoreBody;
+use Axyr\Langfuse\Dto\TraceBody;
+use Axyr\Langfuse\LangfuseFacade;
+use Axyr\Langfuse\Testing\LangfuseFake;
 
 it('swaps facade with fake', function () {
     $fake = LangfuseFacade::fake();

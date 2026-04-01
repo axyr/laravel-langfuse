@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Langfuse\Contracts;
+namespace Axyr\Langfuse\Contracts;
 
 interface SerializableInterface
 {

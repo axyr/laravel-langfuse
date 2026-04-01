@@ -2,9 +2,12 @@
 
 declare(strict_types=1);
 
+use Axyr\Langfuse\Api\PromptApiClient;
+use Axyr\Langfuse\Config\LangfuseConfig;
+use Axyr\Langfuse\Contracts\PromptInterface;
+use Axyr\Langfuse\Dto\CreatePromptBody;
+use Axyr\Langfuse\Dto\PromptListResponse;
 use Illuminate\Support\Facades\Http;
-use Langfuse\Api\PromptApiClient;
-use Langfuse\Config\LangfuseConfig;
 
 beforeEach(function () {
     $this->config = new LangfuseConfig(
@@ -127,14 +130,15 @@ it('creates prompt via api', function () {
     ]);
 
     $client = new PromptApiClient($this->config);
-    $result = $client->create([
-        'name' => 'new-prompt',
-        'type' => 'text',
-        'prompt' => 'Hello {{name}}',
-    ]);
+    $result = $client->create(new CreatePromptBody(
+        name: 'new-prompt',
+        type: 'text',
+        prompt: 'Hello {{name}}',
+    ));
 
-    expect($result)->toBeArray()
-        ->and($result['name'])->toBe('new-prompt');
+    expect($result)->toBeInstanceOf(PromptInterface::class)
+        ->and($result->getName())->toBe('new-prompt')
+        ->and($result->compile(['name' => 'World']))->toBe('Hello World');
 
     Http::assertSent(function ($request) {
         return $request->method() === 'POST'
@@ -149,7 +153,7 @@ it('returns null on prompt create failure', function () {
     ]);
 
     $client = new PromptApiClient($this->config);
-    $result = $client->create(['name' => 'test', 'type' => 'text', 'prompt' => 'test']);
+    $result = $client->create(new CreatePromptBody(name: 'test', type: 'text', prompt: 'test'));
 
     expect($result)->toBeNull();
 });
@@ -158,25 +162,28 @@ it('lists prompts via api', function () {
     Http::fake([
         'test.langfuse.com/api/public/v2/prompts*' => Http::response([
             'data' => [
-                ['name' => 'prompt-1', 'version' => 1],
-                ['name' => 'prompt-2', 'version' => 2],
+                ['name' => 'prompt-1', 'version' => 1, 'type' => 'text', 'labels' => []],
+                ['name' => 'prompt-2', 'version' => 2, 'type' => 'chat', 'labels' => ['production']],
             ],
-            'meta' => ['totalItems' => 2, 'page' => 1],
+            'meta' => ['totalItems' => 2, 'totalPages' => 1, 'page' => 1, 'limit' => 10],
         ]),
     ]);
 
     $client = new PromptApiClient($this->config);
     $result = $client->list();
 
-    expect($result)->toBeArray()
-        ->and($result['data'])->toHaveCount(2);
+    expect($result)->toBeInstanceOf(PromptListResponse::class)
+        ->and($result->data)->toHaveCount(2)
+        ->and($result->data[0]->name)->toBe('prompt-1')
+        ->and($result->data[1]->name)->toBe('prompt-2')
+        ->and($result->meta->totalItems)->toBe(2);
 });
 
 it('passes filter parameters when listing prompts', function () {
     Http::fake([
         'test.langfuse.com/api/public/v2/prompts*' => Http::response([
             'data' => [],
-            'meta' => ['totalItems' => 0, 'page' => 2],
+            'meta' => ['totalItems' => 0, 'totalPages' => 0, 'page' => 2, 'limit' => 10],
         ]),
     ]);
 
@@ -195,7 +202,7 @@ it('passes filter parameters when listing prompts', function () {
 
 it('returns null on prompt list failure', function () {
     Http::fake([
-        'test.langfuse.com/api/public/v2/prompts*' => fn () => throw new \Exception('Connection refused'),
+        'test.langfuse.com/api/public/v2/prompts*' => fn() => throw new \Exception('Connection refused'),
     ]);
 
     $client = new PromptApiClient($this->config);

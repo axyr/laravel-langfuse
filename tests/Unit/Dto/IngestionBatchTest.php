@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-use Langfuse\Dto\IngestionBatch;
-use Langfuse\Dto\IngestionEvent;
-use Langfuse\Dto\TraceBody;
-use Langfuse\Enums\EventType;
+use Axyr\Langfuse\Dto\IngestionBatch;
+use Axyr\Langfuse\Dto\IngestionEvent;
+use Axyr\Langfuse\Dto\TraceBody;
+use Axyr\Langfuse\Enums\EventType;
 
 it('can be constructed with events', function () {
     $event = new IngestionEvent(

@@ -2,11 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Langfuse\Contracts;
+namespace Axyr\Langfuse\Contracts;
 
-use Langfuse\Dto\ScoreBody;
-use Langfuse\Dto\TraceBody;
-use Langfuse\Objects\LangfuseTrace;
+use Axyr\Langfuse\Dto\CreatePromptBody;
+use Axyr\Langfuse\Dto\PromptListResponse;
+use Axyr\Langfuse\Dto\ScoreBody;
+use Axyr\Langfuse\Dto\TraceBody;
+use Axyr\Langfuse\Objects\LangfuseTrace;
 
 interface LangfuseClientInterface
 {
@@ -34,13 +36,7 @@ interface LangfuseClientInterface
         string|array|null $fallback = null,
     ): PromptInterface;
 
-    /**
-     * @param array<string, mixed> $prompt
-     */
-    public function createPrompt(array $prompt): ?array;
+    public function createPrompt(CreatePromptBody $body): ?PromptInterface;
 
-    /**
-     * @return array<string, mixed>|null
-     */
-    public function listPrompts(?string $name = null, ?string $label = null, ?int $page = null, ?int $limit = null): ?array;
+    public function listPrompts(?string $name = null, ?string $label = null, ?int $page = null, ?int $limit = null): ?PromptListResponse;
 }

@@ -11,7 +11,7 @@
     "license": "MIT",
     "autoload": {
         "psr-4": {
-            "Langfuse\\": "src/"
+            "Axyr\\Langfuse\\": "src/"
         }
     },
     "autoload-dev": {
@@ -41,10 +41,10 @@
     "extra": {
         "laravel": {
             "providers": [
-                "Langfuse\\LangfuseServiceProvider"
+                "Axyr\\Langfuse\\LangfuseServiceProvider"
             ],
             "aliases": {
-                "Langfuse": "Langfuse\\LangfuseFacade"
+                "Langfuse": "Axyr\\Langfuse\\LangfuseFacade"
             }
         }
     }

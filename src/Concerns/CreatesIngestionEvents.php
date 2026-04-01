@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Langfuse\Concerns;
+namespace Axyr\Langfuse\Concerns;
 
-use Langfuse\Contracts\SerializableInterface;
-use Langfuse\Dto\IdGenerator;
-use Langfuse\Dto\IngestionEvent;
-use Langfuse\Enums\EventType;
+use Axyr\Langfuse\Contracts\SerializableInterface;
+use Axyr\Langfuse\Dto\IdGenerator;
+use Axyr\Langfuse\Dto\IngestionEvent;
+use Axyr\Langfuse\Enums\EventType;
 
 trait CreatesIngestionEvents
 {

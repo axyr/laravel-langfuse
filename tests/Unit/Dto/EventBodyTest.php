@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
-use Langfuse\Dto\EventBody;
-use Langfuse\Enums\ObservationLevel;
+use Axyr\Langfuse\Dto\EventBody;
+use Axyr\Langfuse\Enums\ObservationLevel;
 
 it('auto-generates id when not provided', function () {
     $event = new EventBody();
@@ -99,5 +99,5 @@ it('includes environment in serialization', function () {
 it('implements SerializableInterface', function () {
     $event = new EventBody(id: 'event-1');
 
-    expect($event)->toBeInstanceOf(\Langfuse\Contracts\SerializableInterface::class);
+    expect($event)->toBeInstanceOf(\Axyr\Langfuse\Contracts\SerializableInterface::class);
 });

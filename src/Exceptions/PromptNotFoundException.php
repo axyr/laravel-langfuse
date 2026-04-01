@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Langfuse\Exceptions;
+namespace Axyr\Langfuse\Exceptions;
 
 use RuntimeException;
 

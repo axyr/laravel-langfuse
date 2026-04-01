@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Langfuse\Http\Middleware;
+namespace Axyr\Langfuse\Http\Middleware;
 
+use Axyr\Langfuse\Contracts\LangfuseClientInterface;
+use Axyr\Langfuse\Dto\TraceBody;
 use Closure;
 use Illuminate\Http\Request;
-use Langfuse\Contracts\LangfuseClientInterface;
-use Langfuse\Dto\TraceBody;
 use Symfony\Component\HttpFoundation\Response;
 
 class LangfuseMiddleware

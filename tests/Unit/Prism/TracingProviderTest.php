@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-use Langfuse\Cache\PromptCache;
-use Langfuse\Config\LangfuseConfig;
-use Langfuse\Contracts\PromptApiClientInterface;
-use Langfuse\Contracts\ScoreApiClientInterface;
-use Langfuse\Dto\IngestionEvent;
-use Langfuse\LangfuseClient;
-use Langfuse\Prism\TracingProvider;
-use Langfuse\Prompt\PromptManager;
-use Langfuse\Testing\RecordingEventBatcher;
+use Axyr\Langfuse\Cache\PromptCache;
+use Axyr\Langfuse\Config\LangfuseConfig;
+use Axyr\Langfuse\Contracts\PromptApiClientInterface;
+use Axyr\Langfuse\Contracts\ScoreApiClientInterface;
+use Axyr\Langfuse\Dto\IngestionEvent;
+use Axyr\Langfuse\LangfuseClient;
+use Axyr\Langfuse\Prism\TracingProvider;
+use Axyr\Langfuse\Prompt\PromptManager;
+use Axyr\Langfuse\Testing\RecordingEventBatcher;
 use Prism\Prism\Enums\FinishReason;
 use Prism\Prism\Providers\Provider;
 use Prism\Prism\Streaming\Events\StreamEndEvent;

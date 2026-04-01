@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use Langfuse\Enums\ObservationLevel;
+use Axyr\Langfuse\Enums\ObservationLevel;
 
 it('has 4 cases', function () {
     expect(ObservationLevel::cases())->toHaveCount(4);

@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Langfuse\Contracts;
+namespace Axyr\Langfuse\Contracts;
 
-use Langfuse\Dto\IngestionBatch;
-use Langfuse\Dto\IngestionResponse;
+use Axyr\Langfuse\Dto\IngestionBatch;
+use Axyr\Langfuse\Dto\IngestionResponse;
 
 interface IngestionApiClientInterface
 {

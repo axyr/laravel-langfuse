@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Langfuse\Prism;
+namespace Axyr\Langfuse\Prism;
 
+use Axyr\Langfuse\Contracts\LangfuseClientInterface;
 use Closure;
 use Illuminate\Contracts\Foundation\Application;
-use Langfuse\Contracts\LangfuseClientInterface;
 use Prism\Prism\Enums\Provider as ProviderEnum;
 use Prism\Prism\PrismManager;
 use Prism\Prism\Providers\Provider;

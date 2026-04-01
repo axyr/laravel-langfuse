@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-use Langfuse\Dto\IngestionEvent;
-use Langfuse\Dto\TraceBody;
-use Langfuse\Enums\EventType;
+use Axyr\Langfuse\Dto\IngestionEvent;
+use Axyr\Langfuse\Dto\TraceBody;
+use Axyr\Langfuse\Enums\EventType;
 
 it('can be constructed', function () {
     $body = new TraceBody(id: 'trace-1', name: 'test');

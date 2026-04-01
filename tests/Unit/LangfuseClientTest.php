@@ -2,18 +2,18 @@
 
 declare(strict_types=1);
 
-use Langfuse\Cache\PromptCache;
-use Langfuse\Config\LangfuseConfig;
-use Langfuse\Contracts\EventBatcherInterface;
-use Langfuse\Contracts\PromptApiClientInterface;
-use Langfuse\Contracts\ScoreApiClientInterface;
-use Langfuse\Dto\IngestionEvent;
-use Langfuse\Dto\ScoreBody;
-use Langfuse\Dto\TraceBody;
-use Langfuse\Enums\EventType;
-use Langfuse\LangfuseClient;
-use Langfuse\Objects\LangfuseTrace;
-use Langfuse\Prompt\PromptManager;
+use Axyr\Langfuse\Cache\PromptCache;
+use Axyr\Langfuse\Config\LangfuseConfig;
+use Axyr\Langfuse\Contracts\EventBatcherInterface;
+use Axyr\Langfuse\Contracts\PromptApiClientInterface;
+use Axyr\Langfuse\Contracts\ScoreApiClientInterface;
+use Axyr\Langfuse\Dto\IngestionEvent;
+use Axyr\Langfuse\Dto\ScoreBody;
+use Axyr\Langfuse\Dto\TraceBody;
+use Axyr\Langfuse\Enums\EventType;
+use Axyr\Langfuse\LangfuseClient;
+use Axyr\Langfuse\Objects\LangfuseTrace;
+use Axyr\Langfuse\Prompt\PromptManager;
 
 function createClient(EventBatcherInterface $batcher, ?LangfuseConfig $config = null): LangfuseClient
 {

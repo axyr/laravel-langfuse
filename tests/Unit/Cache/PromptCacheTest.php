@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
-use Langfuse\Cache\PromptCache;
-use Langfuse\Dto\TextPrompt;
+use Axyr\Langfuse\Cache\PromptCache;
+use Axyr\Langfuse\Dto\TextPrompt;
 
 it('stores and retrieves a prompt', function () {
     $cache = new PromptCache();

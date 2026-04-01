@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
+use Axyr\Langfuse\Api\ScoreApiClient;
+use Axyr\Langfuse\Config\LangfuseConfig;
 use Illuminate\Support\Facades\Http;
-use Langfuse\Api\ScoreApiClient;
-use Langfuse\Config\LangfuseConfig;
 
 beforeEach(function () {
     $this->config = new LangfuseConfig(
@@ -44,7 +44,7 @@ it('returns false on http error', function () {
 
 it('returns false on network error', function () {
     Http::fake([
-        'test.langfuse.com/api/public/scores/*' => fn () => throw new \Exception('Connection refused'),
+        'test.langfuse.com/api/public/scores/*' => fn() => throw new \Exception('Connection refused'),
     ]);
 
     $client = new ScoreApiClient($this->config);

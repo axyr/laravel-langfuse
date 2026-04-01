@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Langfuse\Dto;
+namespace Axyr\Langfuse\Dto;
 
-use Langfuse\Contracts\SerializableInterface;
+use Axyr\Langfuse\Contracts\SerializableInterface;
 
 readonly class IngestionBatch implements SerializableInterface
 {

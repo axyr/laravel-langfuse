@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use Langfuse\Dto\ChatPrompt;
+use Axyr\Langfuse\Dto\ChatPrompt;
 
 it('compiles chat messages with variables', function () {
     $prompt = new ChatPrompt(

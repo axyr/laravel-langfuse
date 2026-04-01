@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Langfuse\Prompt;
+namespace Axyr\Langfuse\Prompt;
 
-use Langfuse\Contracts\PromptApiClientInterface;
-use Langfuse\Contracts\PromptCacheInterface;
-use Langfuse\Contracts\PromptInterface;
-use Langfuse\Dto\PromptFactory;
-use Langfuse\Exceptions\PromptNotFoundException;
+use Axyr\Langfuse\Contracts\PromptApiClientInterface;
+use Axyr\Langfuse\Contracts\PromptCacheInterface;
+use Axyr\Langfuse\Contracts\PromptInterface;
+use Axyr\Langfuse\Dto\PromptFactory;
+use Axyr\Langfuse\Exceptions\PromptNotFoundException;
 
 class PromptManager
 {

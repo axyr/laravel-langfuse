@@ -2,7 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Langfuse\Contracts;
+namespace Axyr\Langfuse\Contracts;
+
+use Axyr\Langfuse\Dto\CreatePromptBody;
+use Axyr\Langfuse\Dto\PromptListResponse;
 
 interface PromptApiClientInterface
 {
@@ -11,14 +14,7 @@ interface PromptApiClientInterface
      */
     public function get(string $name, ?int $version = null, ?string $label = null): ?array;
 
-    /**
-     * @param array<string, mixed> $prompt
-     * @return array<string, mixed>|null
-     */
-    public function create(array $prompt): ?array;
+    public function create(CreatePromptBody $body): ?PromptInterface;
 
-    /**
-     * @return array<string, mixed>|null
-     */
-    public function list(?string $name = null, ?string $label = null, ?int $page = null, ?int $limit = null): ?array;
+    public function list(?string $name = null, ?string $label = null, ?int $page = null, ?int $limit = null): ?PromptListResponse;
 }

@@ -2,18 +2,18 @@
 
 declare(strict_types=1);
 
-use Langfuse\Batch\NullEventBatcher;
-use Langfuse\Contracts\EventBatcherInterface;
-use Langfuse\Dto\EventBody;
-use Langfuse\Dto\GenerationBody;
-use Langfuse\Dto\IngestionEvent;
-use Langfuse\Dto\ScoreBody;
-use Langfuse\Dto\SpanBody;
-use Langfuse\Dto\TraceBody;
-use Langfuse\Enums\EventType;
-use Langfuse\Objects\LangfuseGeneration;
-use Langfuse\Objects\LangfuseSpan;
-use Langfuse\Objects\LangfuseTrace;
+use Axyr\Langfuse\Batch\NullEventBatcher;
+use Axyr\Langfuse\Contracts\EventBatcherInterface;
+use Axyr\Langfuse\Dto\EventBody;
+use Axyr\Langfuse\Dto\GenerationBody;
+use Axyr\Langfuse\Dto\IngestionEvent;
+use Axyr\Langfuse\Dto\ScoreBody;
+use Axyr\Langfuse\Dto\SpanBody;
+use Axyr\Langfuse\Dto\TraceBody;
+use Axyr\Langfuse\Enums\EventType;
+use Axyr\Langfuse\Objects\LangfuseGeneration;
+use Axyr\Langfuse\Objects\LangfuseSpan;
+use Axyr\Langfuse\Objects\LangfuseTrace;
 
 it('enqueues trace-create event on construction', function () {
     $batcher = Mockery::mock(EventBatcherInterface::class);

@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
-use Langfuse\Dto\ScoreBody;
-use Langfuse\Enums\ScoreDataType;
+use Axyr\Langfuse\Dto\ScoreBody;
+use Axyr\Langfuse\Enums\ScoreDataType;
 
 it('auto-generates id when not provided', function () {
     $score = new ScoreBody(name: 'accuracy', traceId: 'trace-1');
@@ -117,7 +117,7 @@ it('includes new fields in serialization', function () {
 it('implements SerializableInterface', function () {
     $score = new ScoreBody(name: 'test', id: 'score-1', traceId: 'trace-1');
 
-    expect($score)->toBeInstanceOf(\Langfuse\Contracts\SerializableInterface::class);
+    expect($score)->toBeInstanceOf(\Axyr\Langfuse\Contracts\SerializableInterface::class);
 });
 
 it('creates new instance with trace id via withTraceId', function () {

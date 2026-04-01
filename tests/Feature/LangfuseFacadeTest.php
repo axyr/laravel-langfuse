@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
+use Axyr\Langfuse\Contracts\LangfuseClientInterface;
+use Axyr\Langfuse\Dto\ScoreBody;
+use Axyr\Langfuse\Dto\TraceBody;
+use Axyr\Langfuse\LangfuseClient;
+use Axyr\Langfuse\LangfuseFacade;
+use Axyr\Langfuse\Objects\LangfuseTrace;
 use Illuminate\Support\Facades\Http;
-use Langfuse\Contracts\LangfuseClientInterface;
-use Langfuse\Dto\ScoreBody;
-use Langfuse\Dto\TraceBody;
-use Langfuse\LangfuseClient;
-use Langfuse\LangfuseFacade;
-use Langfuse\Objects\LangfuseTrace;
 
 it('resolves to LangfuseClientInterface', function () {
     $resolved = LangfuseFacade::getFacadeRoot();

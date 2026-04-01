@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-use Langfuse\Dto\IngestionEvent;
-use Langfuse\Dto\TraceBody;
-use Langfuse\Enums\EventType;
-use Langfuse\Testing\RecordingEventBatcher;
+use Axyr\Langfuse\Dto\IngestionEvent;
+use Axyr\Langfuse\Dto\TraceBody;
+use Axyr\Langfuse\Enums\EventType;
+use Axyr\Langfuse\Testing\RecordingEventBatcher;
 
 it('records enqueued events', function () {
     $batcher = new RecordingEventBatcher();
@@ -51,7 +51,7 @@ it('filters events by type', function () {
         id: '2',
         type: EventType::ScoreCreate,
         timestamp: '2024-01-01T00:00:00Z',
-        body: new \Langfuse\Dto\ScoreBody(id: 'score-1', name: 'test'),
+        body: new \Axyr\Langfuse\Dto\ScoreBody(id: 'score-1', name: 'test'),
     ));
 
     expect($batcher->eventsOfType('trace-create'))->toHaveCount(1)

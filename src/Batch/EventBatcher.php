@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Langfuse\Batch;
+namespace Axyr\Langfuse\Batch;
 
+use Axyr\Langfuse\Config\LangfuseConfig;
+use Axyr\Langfuse\Contracts\EventBatcherInterface;
+use Axyr\Langfuse\Contracts\IngestionApiClientInterface;
+use Axyr\Langfuse\Dto\IngestionBatch;
+use Axyr\Langfuse\Dto\IngestionEvent;
+use Axyr\Langfuse\Dto\IngestionResponse;
 use Illuminate\Support\Facades\Log;
-use Langfuse\Config\LangfuseConfig;
-use Langfuse\Contracts\EventBatcherInterface;
-use Langfuse\Contracts\IngestionApiClientInterface;
-use Langfuse\Dto\IngestionBatch;
-use Langfuse\Dto\IngestionEvent;
-use Langfuse\Dto\IngestionResponse;
 
 class EventBatcher implements EventBatcherInterface
 {

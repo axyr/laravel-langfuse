@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Langfuse\Dto;
+namespace Axyr\Langfuse\Dto;
 
 readonly class IngestionError
 {

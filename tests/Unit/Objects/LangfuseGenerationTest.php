@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-use Langfuse\Contracts\EventBatcherInterface;
-use Langfuse\Dto\GenerationBody;
-use Langfuse\Dto\IngestionEvent;
-use Langfuse\Dto\Usage;
-use Langfuse\Enums\EventType;
-use Langfuse\Enums\ObservationLevel;
-use Langfuse\Objects\LangfuseGeneration;
+use Axyr\Langfuse\Contracts\EventBatcherInterface;
+use Axyr\Langfuse\Dto\GenerationBody;
+use Axyr\Langfuse\Dto\IngestionEvent;
+use Axyr\Langfuse\Dto\Usage;
+use Axyr\Langfuse\Enums\EventType;
+use Axyr\Langfuse\Enums\ObservationLevel;
+use Axyr\Langfuse\Objects\LangfuseGeneration;
 
 it('enqueues generation-create event on construction', function () {
     $batcher = Mockery::mock(EventBatcherInterface::class);

@@ -2,12 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Langfuse\Api;
+namespace Axyr\Langfuse\Api;
 
+use Axyr\Langfuse\Config\LangfuseConfig;
+use Axyr\Langfuse\Contracts\PromptApiClientInterface;
+use Axyr\Langfuse\Contracts\PromptInterface;
+use Axyr\Langfuse\Dto\CreatePromptBody;
+use Axyr\Langfuse\Dto\PromptFactory;
+use Axyr\Langfuse\Dto\PromptListResponse;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Langfuse\Config\LangfuseConfig;
-use Langfuse\Contracts\PromptApiClientInterface;
 
 class PromptApiClient implements PromptApiClientInterface
 {
@@ -26,10 +30,10 @@ class PromptApiClient implements PromptApiClientInterface
         }
     }
 
-    public function create(array $prompt): ?array
+    public function create(CreatePromptBody $body): ?PromptInterface
     {
         try {
-            return $this->doCreate($prompt);
+            return $this->doCreate($body);
         } catch (\Throwable $throwable) {
             Log::warning('Langfuse prompt create error', ['message' => $throwable->getMessage()]);
 
@@ -37,7 +41,7 @@ class PromptApiClient implements PromptApiClientInterface
         }
     }
 
-    public function list(?string $name = null, ?string $label = null, ?int $page = null, ?int $limit = null): ?array
+    public function list(?string $name = null, ?string $label = null, ?int $page = null, ?int $limit = null): ?PromptListResponse
     {
         try {
             return $this->doList($name, $label, $page, $limit);
@@ -78,18 +82,14 @@ class PromptApiClient implements PromptApiClientInterface
         return $response->json();
     }
 
-    /**
-     * @param array<string, mixed> $prompt
-     * @return array<string, mixed>|null
-     */
-    private function doCreate(array $prompt): ?array
+    private function doCreate(CreatePromptBody $body): ?PromptInterface
     {
         $response = Http::withHeaders([
             'Authorization' => $this->config->authHeader(),
             'Content-Type' => 'application/json',
         ])
             ->timeout($this->config->requestTimeout)
-            ->post($this->config->promptsUrl(), $prompt);
+            ->post($this->config->promptsUrl(), $body->toArray());
 
         if (! $response->successful()) {
             Log::warning('Langfuse prompt create failed', [
@@ -100,14 +100,13 @@ class PromptApiClient implements PromptApiClientInterface
             return null;
         }
 
-        /** @var array<string, mixed>|null */
-        return $response->json();
+        /** @var array<string, mixed> $data */
+        $data = $response->json() ?? [];
+
+        return PromptFactory::fromApiResponse($data);
     }
 
-    /**
-     * @return array<string, mixed>|null
-     */
-    private function doList(?string $name, ?string $label, ?int $page, ?int $limit): ?array
+    private function doList(?string $name, ?string $label, ?int $page, ?int $limit): ?PromptListResponse
     {
         $query = array_filter([
             'name' => $name,
@@ -131,7 +130,9 @@ class PromptApiClient implements PromptApiClientInterface
             return null;
         }
 
-        /** @var array<string, mixed>|null */
-        return $response->json();
+        /** @var array<string, mixed> $data */
+        $data = $response->json() ?? [];
+
+        return PromptListResponse::fromArray($data);
     }
 }

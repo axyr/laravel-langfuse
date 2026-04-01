@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use Langfuse\Config\LangfuseConfig;
+use Axyr\Langfuse\Config\LangfuseConfig;
 
 it('can be constructed with all parameters', function () {
     $config = new LangfuseConfig(

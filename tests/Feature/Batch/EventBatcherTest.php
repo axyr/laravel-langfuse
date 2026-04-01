@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-use Langfuse\Batch\EventBatcher;
-use Langfuse\Batch\NullEventBatcher;
-use Langfuse\Config\LangfuseConfig;
-use Langfuse\Contracts\IngestionApiClientInterface;
-use Langfuse\Dto\IngestionBatch;
-use Langfuse\Dto\IngestionEvent;
-use Langfuse\Dto\IngestionResponse;
-use Langfuse\Dto\TraceBody;
-use Langfuse\Enums\EventType;
+use Axyr\Langfuse\Batch\EventBatcher;
+use Axyr\Langfuse\Batch\NullEventBatcher;
+use Axyr\Langfuse\Config\LangfuseConfig;
+use Axyr\Langfuse\Contracts\IngestionApiClientInterface;
+use Axyr\Langfuse\Dto\IngestionBatch;
+use Axyr\Langfuse\Dto\IngestionEvent;
+use Axyr\Langfuse\Dto\IngestionResponse;
+use Axyr\Langfuse\Dto\TraceBody;
+use Axyr\Langfuse\Enums\EventType;
 
 function makeEvent(string $id = 'evt-1'): IngestionEvent
 {

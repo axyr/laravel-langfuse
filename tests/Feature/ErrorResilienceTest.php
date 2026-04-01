@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
+use Axyr\Langfuse\Api\IngestionApiClient;
+use Axyr\Langfuse\Batch\EventBatcher;
+use Axyr\Langfuse\Config\LangfuseConfig;
+use Axyr\Langfuse\Contracts\IngestionApiClientInterface;
+use Axyr\Langfuse\Dto\IngestionBatch;
+use Axyr\Langfuse\Dto\IngestionEvent;
+use Axyr\Langfuse\Dto\TraceBody;
+use Axyr\Langfuse\Enums\EventType;
+use Axyr\Langfuse\LangfuseFacade;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Langfuse\Api\IngestionApiClient;
-use Langfuse\Batch\EventBatcher;
-use Langfuse\Config\LangfuseConfig;
-use Langfuse\Contracts\IngestionApiClientInterface;
-use Langfuse\Dto\IngestionBatch;
-use Langfuse\Dto\IngestionEvent;
-use Langfuse\Dto\TraceBody;
-use Langfuse\Enums\EventType;
-use Langfuse\LangfuseFacade;
 
 beforeEach(function () {
     config([
@@ -22,10 +22,10 @@ beforeEach(function () {
         'langfuse.flush_at' => 100,
     ]);
 
-    $this->app->forgetInstance(\Langfuse\Config\LangfuseConfig::class);
-    $this->app->forgetInstance(\Langfuse\Contracts\EventBatcherInterface::class);
-    $this->app->forgetInstance(\Langfuse\Contracts\IngestionApiClientInterface::class);
-    $this->app->forgetInstance(\Langfuse\Contracts\LangfuseClientInterface::class);
+    $this->app->forgetInstance(\Axyr\Langfuse\Config\LangfuseConfig::class);
+    $this->app->forgetInstance(\Axyr\Langfuse\Contracts\EventBatcherInterface::class);
+    $this->app->forgetInstance(\Axyr\Langfuse\Contracts\IngestionApiClientInterface::class);
+    $this->app->forgetInstance(\Axyr\Langfuse\Contracts\LangfuseClientInterface::class);
 });
 
 it('handles connection timeout without throwing', function () {

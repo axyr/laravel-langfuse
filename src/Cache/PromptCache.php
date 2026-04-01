@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Langfuse\Cache;
+namespace Axyr\Langfuse\Cache;
 
-use Langfuse\Contracts\PromptCacheInterface;
-use Langfuse\Contracts\PromptInterface;
+use Axyr\Langfuse\Contracts\PromptCacheInterface;
+use Axyr\Langfuse\Contracts\PromptInterface;
 
 class PromptCache implements PromptCacheInterface
 {

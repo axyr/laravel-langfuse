@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
+use Axyr\Langfuse\Contracts\PromptInterface;
+use Axyr\Langfuse\LangfuseFacade;
 use Illuminate\Support\Facades\Http;
-use Langfuse\Contracts\PromptInterface;
-use Langfuse\LangfuseFacade;
 
 beforeEach(function () {
     config([
@@ -15,13 +15,13 @@ beforeEach(function () {
         'langfuse.flush_at' => 100,
     ]);
 
-    $this->app->forgetInstance(\Langfuse\Config\LangfuseConfig::class);
-    $this->app->forgetInstance(\Langfuse\Contracts\EventBatcherInterface::class);
-    $this->app->forgetInstance(\Langfuse\Contracts\IngestionApiClientInterface::class);
-    $this->app->forgetInstance(\Langfuse\Contracts\LangfuseClientInterface::class);
-    $this->app->forgetInstance(\Langfuse\Contracts\PromptApiClientInterface::class);
-    $this->app->forgetInstance(\Langfuse\Contracts\PromptCacheInterface::class);
-    $this->app->forgetInstance(\Langfuse\Prompt\PromptManager::class);
+    $this->app->forgetInstance(\Axyr\Langfuse\Config\LangfuseConfig::class);
+    $this->app->forgetInstance(\Axyr\Langfuse\Contracts\EventBatcherInterface::class);
+    $this->app->forgetInstance(\Axyr\Langfuse\Contracts\IngestionApiClientInterface::class);
+    $this->app->forgetInstance(\Axyr\Langfuse\Contracts\LangfuseClientInterface::class);
+    $this->app->forgetInstance(\Axyr\Langfuse\Contracts\PromptApiClientInterface::class);
+    $this->app->forgetInstance(\Axyr\Langfuse\Contracts\PromptCacheInterface::class);
+    $this->app->forgetInstance(\Axyr\Langfuse\Prompt\PromptManager::class);
 });
 
 it('fetches prompt via facade', function () {

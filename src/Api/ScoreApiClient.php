@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Langfuse\Api;
+namespace Axyr\Langfuse\Api;
 
+use Axyr\Langfuse\Config\LangfuseConfig;
+use Axyr\Langfuse\Contracts\ScoreApiClientInterface;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Langfuse\Config\LangfuseConfig;
-use Langfuse\Contracts\ScoreApiClientInterface;
 
 class ScoreApiClient implements ScoreApiClientInterface
 {

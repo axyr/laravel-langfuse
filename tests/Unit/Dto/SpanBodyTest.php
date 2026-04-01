@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
-use Langfuse\Dto\SpanBody;
-use Langfuse\Enums\ObservationLevel;
+use Axyr\Langfuse\Dto\SpanBody;
+use Axyr\Langfuse\Enums\ObservationLevel;
 
 it('auto-generates id when not provided', function () {
     $span = new SpanBody();
@@ -87,5 +87,5 @@ it('includes environment in serialization', function () {
 it('implements SerializableInterface', function () {
     $span = new SpanBody(id: 'span-1');
 
-    expect($span)->toBeInstanceOf(\Langfuse\Contracts\SerializableInterface::class);
+    expect($span)->toBeInstanceOf(\Axyr\Langfuse\Contracts\SerializableInterface::class);
 });

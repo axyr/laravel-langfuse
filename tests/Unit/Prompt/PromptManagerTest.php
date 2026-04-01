@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-use Langfuse\Cache\PromptCache;
-use Langfuse\Contracts\PromptApiClientInterface;
-use Langfuse\Dto\TextPrompt;
-use Langfuse\Exceptions\PromptNotFoundException;
-use Langfuse\Prompt\PromptManager;
+use Axyr\Langfuse\Cache\PromptCache;
+use Axyr\Langfuse\Contracts\PromptApiClientInterface;
+use Axyr\Langfuse\Dto\TextPrompt;
+use Axyr\Langfuse\Exceptions\PromptNotFoundException;
+use Axyr\Langfuse\Prompt\PromptManager;
 
 it('returns cached prompt when fresh', function () {
     $api = Mockery::mock(PromptApiClientInterface::class);

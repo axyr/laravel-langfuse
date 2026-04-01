@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-use Langfuse\Dto\IngestionError;
-use Langfuse\Dto\IngestionResponse;
-use Langfuse\Dto\IngestionSuccess;
+use Axyr\Langfuse\Dto\IngestionError;
+use Axyr\Langfuse\Dto\IngestionResponse;
+use Axyr\Langfuse\Dto\IngestionSuccess;
 
 it('can be created from array with successes', function () {
     $response = IngestionResponse::fromArray([
