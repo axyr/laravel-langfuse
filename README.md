@@ -34,7 +34,7 @@ Langfuse solves this by providing a tracing and analytics platform purpose-built
 Install via Composer:
 
 ```bash
-composer require langfuse/langfuse-php
+composer require axyr/laravel-langfuse
 ```
 
 Publish the configuration file:

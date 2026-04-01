@@ -1,5 +1,5 @@
 {
-    "name": "axyr/langfuse-php",
+    "name": "axyr/laravel-langfuse",
     "description": "Langfuse PHP SDK for Laravel",
     "type": "library",
     "require": {
