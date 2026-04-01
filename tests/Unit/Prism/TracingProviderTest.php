@@ -278,33 +278,43 @@ it('passes through stream events unmodified', function () {
 it('delegates embeddings to inner provider', function () {
     [$langfuse, $batcher] = makeTracingClient();
 
+    $embeddingsResponse = new \Prism\Prism\Embeddings\Response(
+        embeddings: [],
+        usage: new \Prism\Prism\ValueObjects\EmbeddingsUsage(tokens: 0),
+        meta: new Meta(id: 'test', model: 'text-embedding-3-small', rateLimits: []),
+    );
+
     $innerProvider = Mockery::mock(Provider::class);
-    $mockResponse = Mockery::mock(\Prism\Prism\Embeddings\Response::class);
     $innerProvider->shouldReceive('embeddings')
         ->once()
-        ->andReturn($mockResponse);
+        ->andReturn($embeddingsResponse);
 
     $provider = new TracingProvider($innerProvider, $langfuse);
     $request = Mockery::mock(\Prism\Prism\Embeddings\Request::class);
     $response = $provider->embeddings($request);
 
-    expect($response)->toBe($mockResponse)
+    expect($response)->toBe($embeddingsResponse)
         ->and($batcher->events())->toBeEmpty();
 });
 
 it('delegates images to inner provider', function () {
     [$langfuse, $batcher] = makeTracingClient();
 
+    $imagesResponse = new \Prism\Prism\Images\Response(
+        images: [],
+        usage: new PrismUsage(promptTokens: 0, completionTokens: 0),
+        meta: new Meta(id: 'test', model: 'dall-e-3', rateLimits: []),
+    );
+
     $innerProvider = Mockery::mock(Provider::class);
-    $mockResponse = Mockery::mock(\Prism\Prism\Images\Response::class);
     $innerProvider->shouldReceive('images')
         ->once()
-        ->andReturn($mockResponse);
+        ->andReturn($imagesResponse);
 
     $provider = new TracingProvider($innerProvider, $langfuse);
     $request = Mockery::mock(\Prism\Prism\Images\Request::class);
     $response = $provider->images($request);
 
-    expect($response)->toBe($mockResponse)
+    expect($response)->toBe($imagesResponse)
         ->and($batcher->events())->toBeEmpty();
 });
