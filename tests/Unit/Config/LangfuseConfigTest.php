@@ -152,3 +152,21 @@ it('defaults prompt_cache_ttl and prism_enabled for missing array keys', functio
     expect($config->promptCacheTtl)->toBe(60)
         ->and($config->prismEnabled)->toBeFalse();
 });
+
+it('generates correct scores url', function () {
+    $config = new LangfuseConfig(publicKey: 'pk', secretKey: 'sk');
+
+    expect($config->scoresUrl())->toBe('https://cloud.langfuse.com/api/public/scores');
+});
+
+it('generates correct scores url with id', function () {
+    $config = new LangfuseConfig(publicKey: 'pk', secretKey: 'sk');
+
+    expect($config->scoresUrl('score-123'))->toBe('https://cloud.langfuse.com/api/public/scores/score-123');
+});
+
+it('generates correct prompts list url', function () {
+    $config = new LangfuseConfig(publicKey: 'pk', secretKey: 'sk');
+
+    expect($config->promptsUrl())->toBe('https://cloud.langfuse.com/api/public/v2/prompts');
+});

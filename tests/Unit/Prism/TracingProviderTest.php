@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Langfuse\Cache\PromptCache;
 use Langfuse\Config\LangfuseConfig;
 use Langfuse\Contracts\PromptApiClientInterface;
+use Langfuse\Contracts\ScoreApiClientInterface;
 use Langfuse\Dto\IngestionEvent;
 use Langfuse\LangfuseClient;
 use Langfuse\Prism\TracingProvider;
@@ -25,12 +26,19 @@ function makeTracingClient(): array
     $batcher = new RecordingEventBatcher();
 
     $config = new LangfuseConfig(publicKey: 'pk', secretKey: 'sk');
+    $promptApiClient = Mockery::mock(PromptApiClientInterface::class);
     $promptManager = new PromptManager(
-        Mockery::mock(PromptApiClientInterface::class),
+        $promptApiClient,
         new PromptCache(),
     );
 
-    $client = new LangfuseClient($batcher, $config, $promptManager);
+    $client = new LangfuseClient(
+        $batcher,
+        $config,
+        $promptManager,
+        Mockery::mock(ScoreApiClientInterface::class),
+        $promptApiClient,
+    );
 
     return [$client, $batcher];
 }

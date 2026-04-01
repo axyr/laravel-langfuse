@@ -6,6 +6,7 @@ namespace Langfuse\Testing;
 
 use Langfuse\Contracts\LangfuseClientInterface;
 use Langfuse\Contracts\PromptInterface;
+use Langfuse\Dto\IdGenerator;
 use Langfuse\Dto\IngestionEvent;
 use Langfuse\Dto\ScoreBody;
 use Langfuse\Dto\TraceBody;
@@ -20,6 +21,12 @@ class LangfuseFake implements LangfuseClientInterface
 
     /** @var array<PromptInterface> */
     private array $promptResponses = [];
+
+    /** @var array<string> */
+    private array $deletedScores = [];
+
+    /** @var array<array<string, mixed>> */
+    private array $createdPrompts = [];
 
     public function __construct()
     {
@@ -49,11 +56,18 @@ class LangfuseFake implements LangfuseClientInterface
         $event = new IngestionEvent(
             id: $body->id,
             type: \Langfuse\Enums\EventType::ScoreCreate,
-            timestamp: now()->toIso8601ZuluString(),
+            timestamp: IdGenerator::timestamp(),
             body: $body,
         );
 
         $this->batcher->enqueue($event);
+    }
+
+    public function deleteScore(string $scoreId): bool
+    {
+        $this->deletedScores[] = $scoreId;
+
+        return true;
     }
 
     public function flush(): void
@@ -85,6 +99,18 @@ class LangfuseFake implements LangfuseClientInterface
         }
 
         throw \Langfuse\Exceptions\PromptNotFoundException::forName($name);
+    }
+
+    public function createPrompt(array $prompt): ?array
+    {
+        $this->createdPrompts[] = $prompt;
+
+        return $prompt;
+    }
+
+    public function listPrompts(?string $name = null, ?string $label = null, ?int $page = null, ?int $limit = null): ?array
+    {
+        return ['data' => [], 'meta' => ['totalItems' => 0, 'page' => $page ?? 1]];
     }
 
     public function withPrompt(PromptInterface $prompt): self
@@ -189,6 +215,29 @@ class LangfuseFake implements LangfuseClientInterface
             $this->batcher->events(),
             'Expected ' . $expected . ' events but found ' . count($this->batcher->events()) . '.',
         );
+
+        return $this;
+    }
+
+    public function assertScoreDeleted(?string $scoreId = null): self
+    {
+        Assert::assertNotEmpty($this->deletedScores, 'Expected at least one score to be deleted, but none were.');
+
+        if ($scoreId !== null) {
+            Assert::assertContains($scoreId, $this->deletedScores, "Expected score '{$scoreId}' to be deleted but it was not.");
+        }
+
+        return $this;
+    }
+
+    public function assertPromptCreated(?string $name = null): self
+    {
+        Assert::assertNotEmpty($this->createdPrompts, 'Expected at least one prompt to be created, but none were.');
+
+        if ($name !== null) {
+            $names = array_map(fn(array $p): mixed => $p['name'] ?? null, $this->createdPrompts);
+            Assert::assertContains($name, $names, "Expected a prompt named '{$name}' to be created but it was not.");
+        }
 
         return $this;
     }

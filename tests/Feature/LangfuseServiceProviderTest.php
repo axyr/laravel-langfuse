@@ -9,6 +9,7 @@ use Langfuse\Contracts\IngestionApiClientInterface;
 use Langfuse\Contracts\LangfuseClientInterface;
 use Langfuse\Contracts\PromptApiClientInterface;
 use Langfuse\Contracts\PromptCacheInterface;
+use Langfuse\Contracts\ScoreApiClientInterface;
 use Langfuse\LangfuseClient;
 use Langfuse\LangfuseServiceProvider;
 use Langfuse\Prompt\PromptManager;
@@ -63,6 +64,13 @@ it('uses NullEventBatcher when disabled', function () {
     $batcher = $this->app->make(EventBatcherInterface::class);
 
     expect($batcher)->toBeInstanceOf(NullEventBatcher::class);
+});
+
+it('binds ScoreApiClientInterface as singleton', function () {
+    $client1 = $this->app->make(ScoreApiClientInterface::class);
+    $client2 = $this->app->make(ScoreApiClientInterface::class);
+
+    expect($client1)->toBe($client2);
 });
 
 it('binds PromptApiClientInterface as singleton', function () {

@@ -38,6 +38,7 @@ arch('only api clients use Http facade')
     ->toOnlyBeUsedIn([
         'Langfuse\Api\IngestionApiClient',
         'Langfuse\Api\PromptApiClient',
+        'Langfuse\Api\ScoreApiClient',
     ]);
 
 arch('facade extends base facade')

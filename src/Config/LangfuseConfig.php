@@ -79,8 +79,25 @@ readonly class LangfuseConfig
         return rtrim($this->baseUrl, '/') . '/api/public/ingestion';
     }
 
-    public function promptsUrl(string $name): string
+    public function scoresUrl(?string $scoreId = null): string
     {
-        return rtrim($this->baseUrl, '/') . '/api/public/v2/prompts/' . urlencode($name);
+        $url = rtrim($this->baseUrl, '/') . '/api/public/scores';
+
+        if ($scoreId !== null) {
+            $url .= '/' . urlencode($scoreId);
+        }
+
+        return $url;
+    }
+
+    public function promptsUrl(?string $name = null): string
+    {
+        $url = rtrim($this->baseUrl, '/') . '/api/public/v2/prompts';
+
+        if ($name !== null) {
+            $url .= '/' . urlencode($name);
+        }
+
+        return $url;
     }
 }

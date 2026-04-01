@@ -8,7 +8,9 @@ use Langfuse\Concerns\CreatesIngestionEvents;
 use Langfuse\Config\LangfuseConfig;
 use Langfuse\Contracts\EventBatcherInterface;
 use Langfuse\Contracts\LangfuseClientInterface;
+use Langfuse\Contracts\PromptApiClientInterface;
 use Langfuse\Contracts\PromptInterface;
+use Langfuse\Contracts\ScoreApiClientInterface;
 use Langfuse\Dto\ScoreBody;
 use Langfuse\Dto\TraceBody;
 use Langfuse\Enums\EventType;
@@ -25,6 +27,8 @@ class LangfuseClient implements LangfuseClientInterface
         private readonly EventBatcherInterface $batcher,
         private readonly LangfuseConfig $config,
         private readonly PromptManager $promptManager,
+        private readonly ScoreApiClientInterface $scoreApiClient,
+        private readonly PromptApiClientInterface $promptApiClient,
     ) {}
 
     public function trace(TraceBody $body): LangfuseTrace
@@ -53,6 +57,11 @@ class LangfuseClient implements LangfuseClientInterface
         ));
     }
 
+    public function deleteScore(string $scoreId): bool
+    {
+        return $this->scoreApiClient->delete($scoreId);
+    }
+
     public function flush(): void
     {
         $this->batcher->flush();
@@ -70,5 +79,22 @@ class LangfuseClient implements LangfuseClientInterface
         string|array|null $fallback = null,
     ): PromptInterface {
         return $this->promptManager->get($name, $version, $label, $fallback);
+    }
+
+    /**
+     * @param array<string, mixed> $prompt
+     * @return array<string, mixed>|null
+     */
+    public function createPrompt(array $prompt): ?array
+    {
+        return $this->promptApiClient->create($prompt);
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    public function listPrompts(?string $name = null, ?string $label = null, ?int $page = null, ?int $limit = null): ?array
+    {
+        return $this->promptApiClient->list($name, $label, $page, $limit);
     }
 }

@@ -6,6 +6,7 @@ use Langfuse\Cache\PromptCache;
 use Langfuse\Config\LangfuseConfig;
 use Langfuse\Contracts\EventBatcherInterface;
 use Langfuse\Contracts\PromptApiClientInterface;
+use Langfuse\Contracts\ScoreApiClientInterface;
 use Langfuse\Dto\IngestionEvent;
 use Langfuse\Dto\ScoreBody;
 use Langfuse\Dto\TraceBody;
@@ -17,12 +18,19 @@ use Langfuse\Prompt\PromptManager;
 function createClient(EventBatcherInterface $batcher, ?LangfuseConfig $config = null): LangfuseClient
 {
     $config ??= new LangfuseConfig(publicKey: 'pk', secretKey: 'sk');
+    $promptApiClient = Mockery::mock(PromptApiClientInterface::class);
     $promptManager = new PromptManager(
-        Mockery::mock(PromptApiClientInterface::class),
+        $promptApiClient,
         new PromptCache(),
     );
 
-    return new LangfuseClient($batcher, $config, $promptManager);
+    return new LangfuseClient(
+        $batcher,
+        $config,
+        $promptManager,
+        Mockery::mock(ScoreApiClientInterface::class),
+        $promptApiClient,
+    );
 }
 
 it('creates a trace and returns LangfuseTrace', function () {

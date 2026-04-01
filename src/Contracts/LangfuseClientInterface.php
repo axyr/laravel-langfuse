@@ -18,6 +18,8 @@ interface LangfuseClientInterface
 
     public function score(ScoreBody $body): void;
 
+    public function deleteScore(string $scoreId): bool;
+
     public function flush(): void;
 
     public function isEnabled(): bool;
@@ -31,4 +33,14 @@ interface LangfuseClientInterface
         ?string $label = null,
         string|array|null $fallback = null,
     ): PromptInterface;
+
+    /**
+     * @param array<string, mixed> $prompt
+     */
+    public function createPrompt(array $prompt): ?array;
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    public function listPrompts(?string $name = null, ?string $label = null, ?int $page = null, ?int $limit = null): ?array;
 }
