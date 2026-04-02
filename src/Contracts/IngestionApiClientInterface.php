@@ -10,4 +10,9 @@ use Axyr\Langfuse\Dto\IngestionResponse;
 interface IngestionApiClientInterface
 {
     public function send(IngestionBatch $batch): ?IngestionResponse;
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    public function sendRaw(array $payload): ?IngestionResponse;
 }

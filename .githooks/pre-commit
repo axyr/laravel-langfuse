@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -e
+
+echo "Running pre-commit checks..."
+
+echo ""
+echo "==> Pint (code style)"
+vendor/bin/pint --test
+
+echo ""
+echo "==> PHPStan (static analysis)"
+vendor/bin/phpstan analyse
+
+echo ""
+echo "==> PHPMD (complexity)"
+vendor/bin/phpmd src text phpmd.xml
+
+echo ""
+echo "==> Pest (tests)"
+vendor/bin/pest
+
+echo ""
+echo "All checks passed."

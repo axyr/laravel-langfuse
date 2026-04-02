@@ -19,8 +19,16 @@ class IngestionApiClient implements IngestionApiClientInterface
 
     public function send(IngestionBatch $batch): ?IngestionResponse
     {
+        return $this->sendRaw($batch->toArray());
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    public function sendRaw(array $payload): ?IngestionResponse
+    {
         try {
-            return $this->doSend($batch);
+            return $this->doSend($payload);
         } catch (\Throwable $throwable) {
             Log::warning('Langfuse ingestion error', ['message' => $throwable->getMessage()]);
 
@@ -28,14 +36,17 @@ class IngestionApiClient implements IngestionApiClientInterface
         }
     }
 
-    private function doSend(IngestionBatch $batch): ?IngestionResponse
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function doSend(array $payload): ?IngestionResponse
     {
         $response = Http::withHeaders([
             'Authorization' => $this->config->authHeader(),
             'Content-Type' => 'application/json',
         ])
             ->timeout($this->config->requestTimeout)
-            ->post($this->config->ingestionUrl(), $batch->toArray());
+            ->post($this->config->ingestionUrl(), $payload);
 
         if (! $response->successful()) {
             Log::warning('Langfuse ingestion failed', [
@@ -49,6 +60,25 @@ class IngestionApiClient implements IngestionApiClientInterface
         /** @var array<string, mixed> $data */
         $data = $response->json() ?? [];
 
-        return IngestionResponse::fromArray($data);
+        $result = IngestionResponse::fromArray($data);
+
+        $this->logErrors($result);
+
+        return $result;
+    }
+
+    private function logErrors(IngestionResponse $response): void
+    {
+        if (! $response->hasErrors()) {
+            return;
+        }
+
+        foreach ($response->errors as $error) {
+            Log::warning('Langfuse ingestion event error', [
+                'id' => $error->id,
+                'status' => $error->status,
+                'message' => $error->message,
+            ]);
+        }
     }
 }

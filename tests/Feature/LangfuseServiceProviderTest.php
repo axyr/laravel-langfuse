@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Axyr\Langfuse\Batch\NullEventBatcher;
+use Axyr\Langfuse\Batch\QueuedEventBatcher;
 use Axyr\Langfuse\Config\LangfuseConfig;
 use Axyr\Langfuse\Contracts\EventBatcherInterface;
 use Axyr\Langfuse\Contracts\IngestionApiClientInterface;
@@ -64,6 +65,17 @@ it('uses NullEventBatcher when disabled', function () {
     $batcher = $this->app->make(EventBatcherInterface::class);
 
     expect($batcher)->toBeInstanceOf(NullEventBatcher::class);
+});
+
+it('uses QueuedEventBatcher when queue is configured', function () {
+    config(['langfuse.queue' => 'langfuse']);
+
+    $this->app->forgetInstance(LangfuseConfig::class);
+    $this->app->forgetInstance(EventBatcherInterface::class);
+
+    $batcher = $this->app->make(EventBatcherInterface::class);
+
+    expect($batcher)->toBeInstanceOf(QueuedEventBatcher::class);
 });
 
 it('binds ScoreApiClientInterface as singleton', function () {

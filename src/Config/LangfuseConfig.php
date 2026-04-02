@@ -15,6 +15,9 @@ readonly class LangfuseConfig
         public int $requestTimeout = 15,
         public int $promptCacheTtl = 60,
         public bool $prismEnabled = false,
+        public bool $laravelAiEnabled = false,
+        public bool $neuronAiEnabled = false,
+        public ?string $queue = null,
     ) {}
 
     /**
@@ -31,7 +34,19 @@ readonly class LangfuseConfig
             requestTimeout: self::parseInt($config['request_timeout'] ?? null, 15),
             promptCacheTtl: self::parseInt($config['prompt_cache_ttl'] ?? null, 60),
             prismEnabled: self::parseBool($config['prism_enabled'] ?? false),
+            laravelAiEnabled: self::parseBool($config['laravel_ai_enabled'] ?? false),
+            neuronAiEnabled: self::parseBool($config['neuron_ai_enabled'] ?? false),
+            queue: self::parseNullableString($config['queue'] ?? null),
         );
+    }
+
+    private static function parseNullableString(mixed $value): ?string
+    {
+        if (is_string($value) && $value !== '') {
+            return $value;
+        }
+
+        return null;
     }
 
     private static function parseString(mixed $value, string $default): string
@@ -72,6 +87,19 @@ readonly class LangfuseConfig
     public function authHeader(): string
     {
         return 'Basic ' . base64_encode($this->publicKey . ':' . $this->secretKey);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function batchMetadata(int $batchSize): array
+    {
+        return [
+            'batch_size' => $batchSize,
+            'sdk_name' => 'langfuse-php',
+            'sdk_version' => '0.1.0',
+            'public_key' => $this->publicKey,
+        ];
     }
 
     public function ingestionUrl(): string

@@ -13,13 +13,14 @@ use Axyr\Langfuse\Dto\PromptListResponse;
 use Axyr\Langfuse\Dto\ScoreBody;
 use Axyr\Langfuse\Dto\TraceBody;
 use Axyr\Langfuse\Objects\LangfuseTrace;
+use Axyr\Langfuse\Objects\NullLangfuseTrace;
 use PHPUnit\Framework\Assert;
 
 class LangfuseFake implements LangfuseClientInterface
 {
     private readonly RecordingEventBatcher $batcher;
 
-    private ?LangfuseTrace $currentTrace = null;
+    private LangfuseTrace $currentTrace;
 
     /** @var array<PromptInterface> */
     private array $promptResponses = [];
@@ -33,6 +34,7 @@ class LangfuseFake implements LangfuseClientInterface
     public function __construct()
     {
         $this->batcher = new RecordingEventBatcher();
+        $this->currentTrace = new NullLangfuseTrace();
     }
 
     public function trace(TraceBody $body): LangfuseTrace
@@ -43,7 +45,7 @@ class LangfuseFake implements LangfuseClientInterface
         );
     }
 
-    public function currentTrace(): ?LangfuseTrace
+    public function currentTrace(): LangfuseTrace
     {
         return $this->currentTrace;
     }

@@ -13,6 +13,7 @@ use Axyr\Langfuse\Dto\TraceBody;
 use Axyr\Langfuse\Enums\EventType;
 use Axyr\Langfuse\LangfuseClient;
 use Axyr\Langfuse\Objects\LangfuseTrace;
+use Axyr\Langfuse\Objects\NullLangfuseTrace;
 use Axyr\Langfuse\Prompt\PromptManager;
 
 function createClient(EventBatcherInterface $batcher, ?LangfuseConfig $config = null): LangfuseClient
@@ -93,7 +94,7 @@ it('stores and returns current trace', function () {
 
     $client = createClient($batcher);
 
-    expect($client->currentTrace())->toBeNull();
+    expect($client->currentTrace())->toBeInstanceOf(NullLangfuseTrace::class);
 
     $trace = $client->trace(new TraceBody(name: 'test'));
     $client->setCurrentTrace($trace);

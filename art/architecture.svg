@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 520" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="520" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0c1222"/>
+      <stop offset="50%" stop-color="#131c31"/>
+      <stop offset="100%" stop-color="#0c1222"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="600" cy="260" r="500" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1e3a5f" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#0c1222" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="sdkBorder" x1="280" y1="60" x2="920" y2="460" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FF2D20" stop-opacity="0.4"/>
+      <stop offset="50%" stop-color="#c46aec" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#0A60B5" stop-opacity="0.4"/>
+    </linearGradient>
+    <marker id="ahRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#FF2D20" fill-opacity="0.6"/>
+    </marker>
+    <marker id="ahPurple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#c46aec" fill-opacity="0.6"/>
+    </marker>
+    <marker id="ahBlue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#0A60B5" fill-opacity="0.7"/>
+    </marker>
+    <filter id="ds" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="520" rx="12" fill="url(#bg)"/>
+  <rect width="1200" height="520" rx="12" fill="url(#glow)"/>
+
+  <!-- Your Application (pill, left) -->
+  <rect x="30" y="205" width="200" height="52" rx="26" fill="#162035" stroke="#FF2D20" stroke-width="1.5" stroke-opacity="0.6" filter="url(#ds)"/>
+  <text x="130" y="236" font-family="system-ui, -apple-system, sans-serif" font-size="15" font-weight="600" fill="#e2e8f0" text-anchor="middle">Your Application</text>
+
+  <!-- Langfuse (pill, right) -->
+  <rect x="970" y="205" width="190" height="52" rx="26" fill="#162035" stroke="#0A60B5" stroke-width="1.5" stroke-opacity="0.6" filter="url(#ds)"/>
+  <text x="1065" y="236" font-family="system-ui, -apple-system, sans-serif" font-size="15" font-weight="600" fill="#e2e8f0" text-anchor="middle">Langfuse</text>
+
+  <!-- SDK container -->
+  <rect x="280" y="60" width="640" height="400" rx="12" fill="#0f1a2e" fill-opacity="0.6" stroke="url(#sdkBorder)" stroke-width="1.5"/>
+  <text x="600" y="92" font-family="ui-monospace, 'SF Mono', monospace" font-size="13" font-weight="600" letter-spacing="3" fill="#94a3b8" text-anchor="middle">LARAVEL LANGFUSE SDK</text>
+
+  <!-- Observability subgroup -->
+  <rect x="310" y="112" width="280" height="180" rx="8" fill="#111d33" fill-opacity="0.7" stroke="#1e3a5f" stroke-width="1" stroke-opacity="0.5"/>
+  <text x="450" y="138" font-family="ui-monospace, 'SF Mono', monospace" font-size="11" font-weight="500" letter-spacing="2" fill="#94a3b8" text-anchor="middle">OBSERVABILITY</text>
+
+  <!-- Facade node -->
+  <rect x="360" y="155" width="180" height="42" rx="6" fill="#162035" stroke="#FF2D20" stroke-width="1" stroke-opacity="0.5" filter="url(#ds)"/>
+  <text x="450" y="181" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="500" fill="#e2e8f0" text-anchor="middle">LangfuseFacade</text>
+
+  <!-- Facade -> Trace arrow -->
+  <line x1="450" y1="197" x2="450" y2="230" stroke="#FF2D20" stroke-width="1.5" stroke-opacity="0.5" marker-end="url(#ahRed)"/>
+
+  <!-- Trace node -->
+  <rect x="330" y="236" width="240" height="42" rx="6" fill="#162035" stroke="#FF2D20" stroke-width="1" stroke-opacity="0.5" filter="url(#ds)"/>
+  <text x="450" y="262" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="500" fill="#e2e8f0" text-anchor="middle">Trace / Span / Generation</text>
+
+  <!-- Batching subgroup -->
+  <rect x="310" y="312" width="280" height="133" rx="8" fill="#111d33" fill-opacity="0.7" stroke="#1e3a5f" stroke-width="1" stroke-opacity="0.5"/>
+  <text x="450" y="337" font-family="ui-monospace, 'SF Mono', monospace" font-size="11" font-weight="500" letter-spacing="2" fill="#94a3b8" text-anchor="middle">BATCHING</text>
+
+  <!-- EventBatcher node -->
+  <rect x="325" y="350" width="120" height="72" rx="6" fill="#162035" stroke="#c46aec" stroke-width="1" stroke-opacity="0.5" filter="url(#ds)"/>
+  <text x="385" y="381" font-family="system-ui, -apple-system, sans-serif" font-size="13" font-weight="500" fill="#e2e8f0" text-anchor="middle">EventBatcher</text>
+  <text x="385" y="400" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="400" fill="#94a3b8" text-anchor="middle">sync</text>
+
+  <!-- QueuedEventBatcher node -->
+  <rect x="455" y="350" width="120" height="72" rx="6" fill="#162035" stroke="#c46aec" stroke-width="1" stroke-opacity="0.5" filter="url(#ds)"/>
+  <text x="515" y="373" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="500" fill="#e2e8f0" text-anchor="middle">Queued</text>
+  <text x="515" y="390" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="500" fill="#e2e8f0" text-anchor="middle">EventBatcher</text>
+  <text x="515" y="408" font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="400" fill="#94a3b8" text-anchor="middle">async via queue</text>
+
+  <!-- Trace -> EventBatcher arrow -->
+  <path d="M 420 278 L 420 298 Q 420 306 412 306 L 385 306 L 385 348" stroke="#c46aec" stroke-width="1.5" stroke-opacity="0.5" fill="none" marker-end="url(#ahPurple)"/>
+
+  <!-- Trace -> QueuedEventBatcher arrow -->
+  <path d="M 480 278 L 480 298 Q 480 306 488 306 L 515 306 L 515 348" stroke="#c46aec" stroke-width="1.5" stroke-opacity="0.5" fill="none" marker-end="url(#ahPurple)"/>
+
+  <!-- Prompt Management node -->
+  <rect x="625" y="200" width="270" height="72" rx="6" fill="#162035" stroke="#0A60B5" stroke-width="1" stroke-opacity="0.5" filter="url(#ds)"/>
+  <text x="760" y="232" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="500" fill="#e2e8f0" text-anchor="middle">Prompt Management</text>
+  <text x="760" y="252" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="400" fill="#94a3b8" text-anchor="middle">fetch, cache &amp; compile</text>
+
+  <!-- App -> Facade arrow -->
+  <path d="M 230 218 L 358 176" stroke="#FF2D20" stroke-width="1.5" stroke-opacity="0.6" fill="none" marker-end="url(#ahRed)"/>
+  <text x="275" y="188" font-family="ui-monospace, 'SF Mono', monospace" font-size="10" fill="#94a3b8" text-anchor="middle" transform="rotate(-8, 275, 188)">Langfuse::trace()</text>
+
+  <!-- App -> Prompt arrow (routed below Observability) -->
+  <path d="M 230 244 Q 262 298 300 298 L 608 298 Q 625 298 625 278 L 625 274" stroke="#FF2D20" stroke-width="1.5" stroke-opacity="0.6" fill="none" marker-end="url(#ahRed)"/>
+  <text x="275" y="288" font-family="ui-monospace, 'SF Mono', monospace" font-size="10" fill="#94a3b8" text-anchor="middle">Langfuse::prompt()</text>
+
+  <!-- Batchers -> Langfuse arrow (exits right of batching group) -->
+  <path d="M 590 386 L 936 386 Q 944 386 944 378 L 944 252 Q 944 244 952 244 L 970 244" stroke="#0A60B5" stroke-width="1.5" stroke-opacity="0.6" fill="none" marker-end="url(#ahBlue)"/>
+
+  <!-- Prompt -> Langfuse arrow -->
+  <path d="M 895 225 L 970 222" stroke="#0A60B5" stroke-width="1.5" stroke-opacity="0.6" fill="none" marker-end="url(#ahBlue)"/>
+</svg>

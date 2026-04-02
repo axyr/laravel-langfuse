@@ -14,7 +14,7 @@ interface LangfuseClientInterface
 {
     public function trace(TraceBody $body): LangfuseTrace;
 
-    public function currentTrace(): ?LangfuseTrace;
+    public function currentTrace(): LangfuseTrace;
 
     public function setCurrentTrace(LangfuseTrace $trace): void;
 

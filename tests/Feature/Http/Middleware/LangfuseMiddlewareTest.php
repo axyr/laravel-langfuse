@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Axyr\Langfuse\Http\Middleware\LangfuseMiddleware;
 use Axyr\Langfuse\LangfuseFacade as Langfuse;
+use Axyr\Langfuse\Objects\NullLangfuseTrace;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
@@ -41,7 +42,7 @@ it('sets current trace on the client', function () {
 
     $middleware->handle($request, fn() => new Response('OK'));
 
-    expect($fake->currentTrace())->not->toBeNull();
+    expect($fake->currentTrace())->not->toBeInstanceOf(NullLangfuseTrace::class);
 });
 
 it('skips trace creation when disabled', function () {

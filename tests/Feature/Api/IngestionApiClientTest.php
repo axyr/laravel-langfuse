@@ -85,13 +85,21 @@ it('returns null on connection exception without throwing', function () {
     expect($response)->toBeNull();
 });
 
-it('parses response with errors', function () {
+it('parses response with errors and logs them', function () {
     Http::fake([
         'cloud.langfuse.com/api/public/ingestion' => Http::response([
             'successes' => [['id' => 'evt-1', 'status' => 201]],
             'errors' => [['id' => 'evt-2', 'status' => 400, 'message' => 'Invalid']],
         ]),
     ]);
+
+    Log::shouldReceive('warning')
+        ->once()
+        ->with('Langfuse ingestion event error', Mockery::on(function (array $context) {
+            return $context['id'] === 'evt-2'
+                && $context['status'] === 400
+                && $context['message'] === 'Invalid';
+        }));
 
     $batch = new IngestionBatch(batch: []);
 
@@ -131,4 +139,44 @@ it('sends correct payload structure', function () {
             && $data['batch'][0]['type'] === 'trace-create'
             && $data['batch'][0]['body']['id'] === 'trace-1';
     });
+});
+
+it('sends raw payload via sendRaw', function () {
+    Http::fake([
+        'cloud.langfuse.com/api/public/ingestion' => Http::response([
+            'successes' => [['id' => 'evt-1', 'status' => 201]],
+            'errors' => [],
+        ]),
+    ]);
+
+    $payload = [
+        'batch' => [['id' => 'evt-1', 'type' => 'trace-create', 'timestamp' => '2024-01-01T00:00:00Z', 'body' => ['id' => 'trace-1']]],
+        'metadata' => (object) ['sdk_name' => 'langfuse-php'],
+    ];
+
+    $response = $this->client->sendRaw($payload);
+
+    Http::assertSent(function ($request) {
+        return $request->url() === 'https://cloud.langfuse.com/api/public/ingestion'
+            && $request->hasHeader('Authorization', $this->config->authHeader())
+            && isset($request->data()['batch'])
+            && count($request->data()['batch']) === 1;
+    });
+
+    expect($response)->toBeInstanceOf(IngestionResponse::class)
+        ->and($response->successes)->toHaveCount(1);
+});
+
+it('sendRaw returns null on connection exception without throwing', function () {
+    Http::fake(function () {
+        throw new \Illuminate\Http\Client\ConnectionException('Connection refused');
+    });
+
+    Log::shouldReceive('warning')
+        ->once()
+        ->with('Langfuse ingestion error', \Mockery::type('array'));
+
+    $response = $this->client->sendRaw(['batch' => []]);
+
+    expect($response)->toBeNull();
 });

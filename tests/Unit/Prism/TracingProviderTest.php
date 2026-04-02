@@ -8,6 +8,7 @@ use Axyr\Langfuse\Contracts\PromptApiClientInterface;
 use Axyr\Langfuse\Contracts\ScoreApiClientInterface;
 use Axyr\Langfuse\Dto\IngestionEvent;
 use Axyr\Langfuse\LangfuseClient;
+use Axyr\Langfuse\Objects\NullLangfuseTrace;
 use Axyr\Langfuse\Prism\TracingProvider;
 use Axyr\Langfuse\Prompt\PromptManager;
 use Axyr\Langfuse\Testing\RecordingEventBatcher;
@@ -325,7 +326,7 @@ it('creates new trace when no current trace exists', function () {
     $provider->text(makeTextRequest());
 
     // Should have set current trace on the client
-    expect($langfuse->currentTrace())->not->toBeNull();
+    expect($langfuse->currentTrace())->not->toBeInstanceOf(NullLangfuseTrace::class);
 });
 
 it('delegates embeddings to inner provider', function () {

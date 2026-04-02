@@ -17,13 +17,14 @@ use Axyr\Langfuse\Dto\ScoreBody;
 use Axyr\Langfuse\Dto\TraceBody;
 use Axyr\Langfuse\Enums\EventType;
 use Axyr\Langfuse\Objects\LangfuseTrace;
+use Axyr\Langfuse\Objects\NullLangfuseTrace;
 use Axyr\Langfuse\Prompt\PromptManager;
 
 class LangfuseClient implements LangfuseClientInterface
 {
     use CreatesIngestionEvents;
 
-    private ?LangfuseTrace $currentTrace = null;
+    private LangfuseTrace $currentTrace;
 
     public function __construct(
         private readonly EventBatcherInterface $batcher,
@@ -31,7 +32,9 @@ class LangfuseClient implements LangfuseClientInterface
         private readonly PromptManager $promptManager,
         private readonly ScoreApiClientInterface $scoreApiClient,
         private readonly PromptApiClientInterface $promptApiClient,
-    ) {}
+    ) {
+        $this->currentTrace = new NullLangfuseTrace();
+    }
 
     public function trace(TraceBody $body): LangfuseTrace
     {
@@ -41,7 +44,7 @@ class LangfuseClient implements LangfuseClientInterface
         );
     }
 
-    public function currentTrace(): ?LangfuseTrace
+    public function currentTrace(): LangfuseTrace
     {
         return $this->currentTrace;
     }

@@ -1,0 +1,18 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Laravel\Ai\Events;
+
+use Laravel\Ai\Prompts\AgentPrompt;
+use Laravel\Ai\Responses\AgentResponse;
+use Laravel\Ai\Responses\StreamedAgentResponse;
+
+class AgentPrompted
+{
+    public function __construct(
+        public string $invocationId,
+        public AgentPrompt $prompt,
+        public StreamedAgentResponse|AgentResponse $response,
+    ) {}
+}

@@ -9,6 +9,7 @@ use Axyr\Langfuse\Dto\GenerationBody;
 use Axyr\Langfuse\Dto\TraceBody;
 use Axyr\Langfuse\Dto\Usage;
 use Axyr\Langfuse\Enums\ObservationLevel;
+use Axyr\Langfuse\Objects\NullLangfuseTrace;
 use Generator;
 use Illuminate\Http\Client\RequestException;
 use Prism\Prism\Audio\AudioResponse as TextToSpeechResponse;
@@ -219,7 +220,7 @@ class TracingProvider extends Provider
     ): \Axyr\Langfuse\Objects\LangfuseTrace {
         $existing = $this->langfuse->currentTrace();
 
-        if ($existing !== null) {
+        if (! $existing instanceof NullLangfuseTrace) {
             return $existing;
         }
 

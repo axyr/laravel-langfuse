@@ -14,6 +14,7 @@ it('can be constructed with all parameters', function () {
         requestTimeout: 30,
         promptCacheTtl: 120,
         prismEnabled: true,
+        queue: 'langfuse',
     );
 
     expect($config->publicKey)->toBe('pk-test')
@@ -23,7 +24,8 @@ it('can be constructed with all parameters', function () {
         ->and($config->flushAt)->toBe(20)
         ->and($config->requestTimeout)->toBe(30)
         ->and($config->promptCacheTtl)->toBe(120)
-        ->and($config->prismEnabled)->toBeTrue();
+        ->and($config->prismEnabled)->toBeTrue()
+        ->and($config->queue)->toBe('langfuse');
 });
 
 it('has sensible defaults', function () {
@@ -34,7 +36,8 @@ it('has sensible defaults', function () {
         ->and($config->flushAt)->toBe(10)
         ->and($config->requestTimeout)->toBe(15)
         ->and($config->promptCacheTtl)->toBe(60)
-        ->and($config->prismEnabled)->toBeFalse();
+        ->and($config->prismEnabled)->toBeFalse()
+        ->and($config->queue)->toBeNull();
 });
 
 it('can be created from array', function () {
@@ -47,6 +50,7 @@ it('can be created from array', function () {
         'request_timeout' => 20,
         'prompt_cache_ttl' => 90,
         'prism_enabled' => true,
+        'queue' => 'langfuse',
     ]);
 
     expect($config->publicKey)->toBe('pk-arr')
@@ -56,7 +60,8 @@ it('can be created from array', function () {
         ->and($config->flushAt)->toBe(25)
         ->and($config->requestTimeout)->toBe(20)
         ->and($config->promptCacheTtl)->toBe(90)
-        ->and($config->prismEnabled)->toBeTrue();
+        ->and($config->prismEnabled)->toBeTrue()
+        ->and($config->queue)->toBe('langfuse');
 });
 
 it('uses defaults for missing array keys', function () {
@@ -163,6 +168,39 @@ it('generates correct scores url with id', function () {
     $config = new LangfuseConfig(publicKey: 'pk', secretKey: 'sk');
 
     expect($config->scoresUrl('score-123'))->toBe('https://cloud.langfuse.com/api/public/scores/score-123');
+});
+
+it('parses queue from fromArray', function () {
+    $config = LangfuseConfig::fromArray([
+        'queue' => 'langfuse',
+    ]);
+
+    expect($config->queue)->toBe('langfuse');
+});
+
+it('defaults queue to null for missing array key', function () {
+    $config = LangfuseConfig::fromArray([]);
+
+    expect($config->queue)->toBeNull();
+});
+
+it('defaults queue to null for empty string', function () {
+    $config = LangfuseConfig::fromArray([
+        'queue' => '',
+    ]);
+
+    expect($config->queue)->toBeNull();
+});
+
+it('generates batch metadata', function () {
+    $config = new LangfuseConfig(publicKey: 'pk-meta', secretKey: 'sk');
+
+    expect($config->batchMetadata(5))->toBe([
+        'batch_size' => 5,
+        'sdk_name' => 'langfuse-php',
+        'sdk_version' => '0.1.0',
+        'public_key' => 'pk-meta',
+    ]);
 });
 
 it('generates correct prompts list url', function () {

@@ -9,6 +9,7 @@ use Axyr\Langfuse\Api\PromptApiClient;
 use Axyr\Langfuse\Api\ScoreApiClient;
 use Axyr\Langfuse\Batch\EventBatcher;
 use Axyr\Langfuse\Batch\NullEventBatcher;
+use Axyr\Langfuse\Batch\QueuedEventBatcher;
 use Axyr\Langfuse\Cache\PromptCache;
 use Axyr\Langfuse\Config\LangfuseConfig;
 use Axyr\Langfuse\Contracts\EventBatcherInterface;
@@ -19,6 +20,7 @@ use Axyr\Langfuse\Contracts\PromptCacheInterface;
 use Axyr\Langfuse\Contracts\ScoreApiClientInterface;
 use Axyr\Langfuse\Prompt\PromptManager;
 use Illuminate\Contracts\Config\Repository;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 
 class LangfuseServiceProvider extends ServiceProvider
@@ -47,6 +49,8 @@ class LangfuseServiceProvider extends ServiceProvider
         });
 
         $this->registerPrismIntegration();
+        $this->registerLaravelAiIntegration();
+        $this->registerNeuronAiIntegration();
     }
 
     private function registerConfig(): void
@@ -75,6 +79,10 @@ class LangfuseServiceProvider extends ServiceProvider
                 return new NullEventBatcher();
             }
 
+            if ($config->queue !== null) {
+                return $this->app->make(QueuedEventBatcher::class);
+            }
+
             return $this->app->make(EventBatcher::class);
         });
     }
@@ -94,6 +102,40 @@ class LangfuseServiceProvider extends ServiceProvider
                 cacheTtl: $config->promptCacheTtl,
             );
         });
+    }
+
+    private function registerLaravelAiIntegration(): void
+    {
+        if (! class_exists(\Laravel\Ai\Events\PromptingAgent::class)) {
+            return;
+        }
+
+        /** @var LangfuseConfig $config */
+        $config = $this->app->make(LangfuseConfig::class);
+
+        if (! $config->laravelAiEnabled) {
+            return;
+        }
+
+        $this->app->scoped(LaravelAi\LaravelAiSubscriber::class);
+
+        Event::subscribe(LaravelAi\LaravelAiSubscriber::class);
+    }
+
+    private function registerNeuronAiIntegration(): void
+    {
+        if (! interface_exists(\NeuronAI\Observability\ObserverInterface::class)) {
+            return;
+        }
+
+        /** @var LangfuseConfig $config */
+        $config = $this->app->make(LangfuseConfig::class);
+
+        if (! $config->neuronAiEnabled) {
+            return;
+        }
+
+        $this->app->scoped(NeuronAi\NeuronAiObserver::class);
     }
 
     private function registerPrismIntegration(): void

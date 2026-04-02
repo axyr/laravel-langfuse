@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Facade;
 
 /**
  * @method static \Axyr\Langfuse\Objects\LangfuseTrace trace(\Axyr\Langfuse\Dto\TraceBody $body)
- * @method static \Axyr\Langfuse\Objects\LangfuseTrace|null currentTrace()
+ * @method static \Axyr\Langfuse\Objects\LangfuseTrace currentTrace()
  * @method static void setCurrentTrace(\Axyr\Langfuse\Objects\LangfuseTrace $trace)
  * @method static void score(\Axyr\Langfuse\Dto\ScoreBody $body)
  * @method static void flush()

@@ -84,3 +84,23 @@ arch('tracing provider extends prism provider')
 arch('tracing manager extends prism manager')
     ->expect('Axyr\\Langfuse\\Prism\TracingPrismManager')
     ->toExtend('Prism\Prism\PrismManager');
+
+arch('queued event batcher implements batcher interface')
+    ->expect('Axyr\\Langfuse\\Batch\QueuedEventBatcher')
+    ->toImplement('Axyr\\Langfuse\\Contracts\EventBatcherInterface');
+
+arch('send ingestion batch job implements should queue')
+    ->expect('Axyr\\Langfuse\\Jobs\SendIngestionBatchJob')
+    ->toImplement('Illuminate\\Contracts\\Queue\\ShouldQueue');
+
+arch('null trace extends trace')
+    ->expect('Axyr\\Langfuse\\Objects\NullLangfuseTrace')
+    ->toExtend('Axyr\\Langfuse\\Objects\LangfuseTrace');
+
+arch('null span extends span')
+    ->expect('Axyr\\Langfuse\\Objects\NullLangfuseSpan')
+    ->toExtend('Axyr\\Langfuse\\Objects\LangfuseSpan');
+
+arch('null generation extends generation')
+    ->expect('Axyr\\Langfuse\\Objects\NullLangfuseGeneration')
+    ->toExtend('Axyr\\Langfuse\\Objects\LangfuseGeneration');

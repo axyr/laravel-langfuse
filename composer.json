@@ -16,7 +16,9 @@
     },
     "autoload-dev": {
         "psr-4": {
-            "Tests\\": "tests/"
+            "Tests\\": "tests/",
+            "Laravel\\Ai\\": "tests/Stubs/LaravelAi/",
+            "NeuronAI\\": "tests/Stubs/NeuronAi/"
         }
     },
     "require-dev": {
@@ -28,6 +30,8 @@
         "prism-php/prism": "^0.100"
     },
     "suggest": {
+        "laravel/ai": "Required for automatic Laravel AI SDK tracing (^0.4)",
+        "neuron-core/neuron-ai": "Required for automatic Neuron AI agent tracing (^3.0)",
         "prism-php/prism": "Required for automatic Prism LLM call tracing (^0.100)"
     },
     "config": {
