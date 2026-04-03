@@ -128,4 +128,15 @@ readonly class LangfuseConfig
 
         return $url;
     }
+
+    /**
+     * Determines if Prism tracing should be enabled.
+     *
+     * Prism is automatically enabled when Laravel AI is enabled,
+     * since Laravel AI uses Prism under the hood.
+     */
+    public function shouldEnablePrism(): bool
+    {
+        return $this->prismEnabled || $this->laravelAiEnabled;
+    }
 }

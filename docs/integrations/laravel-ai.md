@@ -10,6 +10,8 @@ Auto-instrumentation for the official [Laravel AI SDK](https://laravel.com/docs/
 LANGFUSE_LARAVEL_AI_ENABLED=true
 ```
 
+**Note:** Laravel AI uses Prism under the hood. When you enable Laravel AI tracing, Prism tracing is automatically enabled as well - you don't need to set `LANGFUSE_PRISM_ENABLED=true` separately.
+
 ## What gets traced
 
 The SDK listens to Laravel AI's event system:

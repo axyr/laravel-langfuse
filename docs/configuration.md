@@ -15,7 +15,7 @@ All configuration lives in `config/langfuse.php`. Override anything via environm
 | `LANGFUSE_PROMPT_CACHE_TTL` | `60` | Prompt cache TTL in seconds |
 | `LANGFUSE_QUEUE` | `null` | Queue name for async batching (e.g. `langfuse`) |
 | `LANGFUSE_PRISM_ENABLED` | `false` | Auto-trace Prism LLM calls |
-| `LANGFUSE_LARAVEL_AI_ENABLED` | `false` | Auto-trace Laravel AI SDK calls |
+| `LANGFUSE_LARAVEL_AI_ENABLED` | `false` | Auto-trace Laravel AI SDK calls (also enables Prism tracing) |
 | `LANGFUSE_NEURON_AI_ENABLED` | `false` | Auto-trace Neuron AI agents |
 
 ## Publishing the config file

@@ -208,3 +208,47 @@ it('generates correct prompts list url', function () {
 
     expect($config->promptsUrl())->toBe('https://cloud.langfuse.com/api/public/v2/prompts');
 });
+
+it('should enable prism when explicitly enabled', function () {
+    $config = new LangfuseConfig(
+        publicKey: 'pk',
+        secretKey: 'sk',
+        prismEnabled: true,
+        laravelAiEnabled: false,
+    );
+
+    expect($config->shouldEnablePrism())->toBeTrue();
+});
+
+it('should enable prism when laravel ai is enabled', function () {
+    $config = new LangfuseConfig(
+        publicKey: 'pk',
+        secretKey: 'sk',
+        prismEnabled: false,
+        laravelAiEnabled: true,
+    );
+
+    expect($config->shouldEnablePrism())->toBeTrue();
+});
+
+it('should enable prism when both are enabled', function () {
+    $config = new LangfuseConfig(
+        publicKey: 'pk',
+        secretKey: 'sk',
+        prismEnabled: true,
+        laravelAiEnabled: true,
+    );
+
+    expect($config->shouldEnablePrism())->toBeTrue();
+});
+
+it('should not enable prism when both are disabled', function () {
+    $config = new LangfuseConfig(
+        publicKey: 'pk',
+        secretKey: 'sk',
+        prismEnabled: false,
+        laravelAiEnabled: false,
+    );
+
+    expect($config->shouldEnablePrism())->toBeFalse();
+});

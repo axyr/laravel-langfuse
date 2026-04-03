@@ -10,7 +10,7 @@ Auto-instrumentation for [Prism](https://github.com/prism-php/prism) LLM calls. 
 LANGFUSE_PRISM_ENABLED=true
 ```
 
-That's it.
+**Note:** Prism is automatically enabled when you enable [Laravel AI integration](laravel-ai.md), since Laravel AI uses Prism under the hood.
 
 ## What gets traced
 

@@ -147,7 +147,7 @@ class LangfuseServiceProvider extends ServiceProvider
         /** @var LangfuseConfig $config */
         $config = $this->app->make(LangfuseConfig::class);
 
-        if (! $config->prismEnabled) {
+        if (! $config->shouldEnablePrism()) {
             return;
         }
 
