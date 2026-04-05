@@ -34,6 +34,29 @@
         "neuron-core/neuron-ai": "Required for automatic Neuron AI agent tracing (^3.0)",
         "prism-php/prism": "Required for automatic Prism LLM call tracing (^0.100)"
     },
+    "scripts": {
+        "test": "pest",
+        "test:arch": "pest --filter=arch",
+        "analyse": "phpstan analyse",
+        "format": "pint",
+        "format:test": "pint --test",
+        "complexity": "phpmd src text phpmd.xml 2>&1 | grep -v 'Deprecated:' | grep -v 'PHP Deprecated:' || true",
+        "quality": [
+            "@format:test",
+            "@analyse",
+            "@complexity",
+            "@test"
+        ],
+        "post-install-cmd": [
+            "@install-hooks"
+        ],
+        "post-update-cmd": [
+            "@install-hooks"
+        ],
+        "install-hooks": [
+            "bash -c 'if [ -d .git ]; then cp hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit && echo \"Pre-commit hook installed\"; fi'"
+        ]
+    },
     "config": {
         "allow-plugins": {
             "pestphp/pest-plugin": true

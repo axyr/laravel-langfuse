@@ -7,6 +7,10 @@
 
     <description>Langfuse PHP SDK quality ruleset</description>
 
+    <exclude-pattern>*/vendor/*</exclude-pattern>
+    <exclude-pattern>*/tests/Stubs/*</exclude-pattern>
+    <exclude-pattern>*/node_modules/*</exclude-pattern>
+
     <rule ref="rulesets/codesize.xml/CyclomaticComplexity">
         <properties>
             <property name="reportLevel" value="5" />
