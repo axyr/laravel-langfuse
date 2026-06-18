@@ -45,6 +45,7 @@ function makeLangfuseClient(): array
         Mockery::mock(ScoreApiClientInterface::class),
         $promptApiClient,
         Mockery::mock(\Axyr\Langfuse\Contracts\ObservationApiClientInterface::class),
+        Mockery::mock(\Axyr\Langfuse\Contracts\MetricsApiClientInterface::class),
     );
 
     return [$client, $batcher];

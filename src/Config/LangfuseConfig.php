@@ -145,6 +145,11 @@ readonly class LangfuseConfig
         return rtrim($this->baseUrl, '/') . '/api/public/v2/observations';
     }
 
+    public function metricsUrl(): string
+    {
+        return rtrim($this->baseUrl, '/') . '/api/public/metrics';
+    }
+
     public function promptsUrl(?string $name = null): string
     {
         $url = rtrim($this->baseUrl, '/') . '/api/public/v2/prompts';

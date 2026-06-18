@@ -9,6 +9,8 @@ use Axyr\Langfuse\Contracts\PromptInterface;
 use Axyr\Langfuse\Dto\CreatePromptBody;
 use Axyr\Langfuse\Dto\IdGenerator;
 use Axyr\Langfuse\Dto\IngestionEvent;
+use Axyr\Langfuse\Dto\MetricQuery;
+use Axyr\Langfuse\Dto\MetricsResponse;
 use Axyr\Langfuse\Dto\ObservationListMeta;
 use Axyr\Langfuse\Dto\ObservationListResponse;
 use Axyr\Langfuse\Dto\ObservationQuery;
@@ -41,6 +43,9 @@ class LangfuseFake implements LangfuseClientInterface
 
     /** @var array<string, ObservationResponse> */
     private array $observationResponsesById = [];
+
+    /** @var array<int, array<string, mixed>> */
+    private array $metricsData = [];
 
     /** @var array<CreatePromptBody> */
     private array $createdPrompts = [];
@@ -145,6 +150,21 @@ class LangfuseFake implements LangfuseClientInterface
     public function withObservation(ObservationResponse $observation): self
     {
         $this->observationResponsesById[$observation->id] = $observation;
+
+        return $this;
+    }
+
+    public function queryMetrics(MetricQuery $query): ?MetricsResponse
+    {
+        return new MetricsResponse(data: $this->metricsData);
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $data
+     */
+    public function withMetrics(array $data): self
+    {
+        $this->metricsData = $data;
 
         return $this;
     }

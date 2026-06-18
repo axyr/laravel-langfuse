@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Axyr\Langfuse\Contracts;
 
 use Axyr\Langfuse\Dto\CreatePromptBody;
+use Axyr\Langfuse\Dto\MetricQuery;
+use Axyr\Langfuse\Dto\MetricsResponse;
 use Axyr\Langfuse\Dto\ObservationListResponse;
 use Axyr\Langfuse\Dto\ObservationQuery;
 use Axyr\Langfuse\Dto\ObservationResponse;
@@ -35,6 +37,8 @@ interface LangfuseClientInterface
     public function getObservation(string $observationId): ?ObservationResponse;
 
     public function getObservations(?ObservationQuery $query = null): ?ObservationListResponse;
+
+    public function queryMetrics(MetricQuery $query): ?MetricsResponse;
 
     public function flush(): void;
 

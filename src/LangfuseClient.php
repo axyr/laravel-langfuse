@@ -8,11 +8,14 @@ use Axyr\Langfuse\Concerns\CreatesIngestionEvents;
 use Axyr\Langfuse\Config\LangfuseConfig;
 use Axyr\Langfuse\Contracts\EventBatcherInterface;
 use Axyr\Langfuse\Contracts\LangfuseClientInterface;
+use Axyr\Langfuse\Contracts\MetricsApiClientInterface;
 use Axyr\Langfuse\Contracts\ObservationApiClientInterface;
 use Axyr\Langfuse\Contracts\PromptApiClientInterface;
 use Axyr\Langfuse\Contracts\PromptInterface;
 use Axyr\Langfuse\Contracts\ScoreApiClientInterface;
 use Axyr\Langfuse\Dto\CreatePromptBody;
+use Axyr\Langfuse\Dto\MetricQuery;
+use Axyr\Langfuse\Dto\MetricsResponse;
 use Axyr\Langfuse\Dto\ObservationListResponse;
 use Axyr\Langfuse\Dto\ObservationQuery;
 use Axyr\Langfuse\Dto\ObservationResponse;
@@ -40,6 +43,7 @@ class LangfuseClient implements LangfuseClientInterface
         private readonly ScoreApiClientInterface $scoreApiClient,
         private readonly PromptApiClientInterface $promptApiClient,
         private readonly ObservationApiClientInterface $observationApiClient,
+        private readonly MetricsApiClientInterface $metricsApiClient,
     ) {
         $this->currentTrace = new NullLangfuseTrace();
     }
@@ -93,6 +97,11 @@ class LangfuseClient implements LangfuseClientInterface
     public function getObservations(?ObservationQuery $query = null): ?ObservationListResponse
     {
         return $this->observationApiClient->getMany($query);
+    }
+
+    public function queryMetrics(MetricQuery $query): ?MetricsResponse
+    {
+        return $this->metricsApiClient->query($query);
     }
 
     public function flush(): void

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Axyr\Langfuse;
 
 use Axyr\Langfuse\Api\IngestionApiClient;
+use Axyr\Langfuse\Api\MetricsApiClient;
 use Axyr\Langfuse\Api\ObservationApiClient;
 use Axyr\Langfuse\Api\PromptApiClient;
 use Axyr\Langfuse\Api\ScoreApiClient;
@@ -16,6 +17,7 @@ use Axyr\Langfuse\Config\LangfuseConfig;
 use Axyr\Langfuse\Contracts\EventBatcherInterface;
 use Axyr\Langfuse\Contracts\IngestionApiClientInterface;
 use Axyr\Langfuse\Contracts\LangfuseClientInterface;
+use Axyr\Langfuse\Contracts\MetricsApiClientInterface;
 use Axyr\Langfuse\Contracts\ObservationApiClientInterface;
 use Axyr\Langfuse\Contracts\PromptApiClientInterface;
 use Axyr\Langfuse\Contracts\PromptCacheInterface;
@@ -73,6 +75,7 @@ class LangfuseServiceProvider extends ServiceProvider
         $this->app->singleton(IngestionApiClientInterface::class, IngestionApiClient::class);
         $this->app->singleton(ScoreApiClientInterface::class, ScoreApiClient::class);
         $this->app->singleton(ObservationApiClientInterface::class, ObservationApiClient::class);
+        $this->app->singleton(MetricsApiClientInterface::class, MetricsApiClient::class);
 
         $this->app->scoped(EventBatcherInterface::class, function () {
             /** @var LangfuseConfig $config */
