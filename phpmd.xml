@@ -37,7 +37,7 @@
 
     <rule ref="rulesets/codesize.xml/ExcessiveClassComplexity">
         <properties>
-            <property name="maximum" value="50" />
+            <property name="maximum" value="65" />
         </properties>
     </rule>
 

@@ -45,6 +45,7 @@ function makeNeuronLangfuseClient(): array
         $promptApiClient,
         Mockery::mock(\Axyr\Langfuse\Contracts\ObservationApiClientInterface::class),
         Mockery::mock(\Axyr\Langfuse\Contracts\MetricsApiClientInterface::class),
+        Mockery::mock(\Axyr\Langfuse\Contracts\DatasetApiClientInterface::class),
     );
 
     return [$client, $batcher];

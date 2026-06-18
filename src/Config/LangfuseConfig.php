@@ -150,6 +150,17 @@ readonly class LangfuseConfig
         return rtrim($this->baseUrl, '/') . '/api/public/metrics';
     }
 
+    public function datasetsUrl(?string $datasetName = null): string
+    {
+        $url = rtrim($this->baseUrl, '/') . '/api/public/v2/datasets';
+
+        if ($datasetName !== null) {
+            $url .= '/' . urlencode($datasetName);
+        }
+
+        return $url;
+    }
+
     public function promptsUrl(?string $name = null): string
     {
         $url = rtrim($this->baseUrl, '/') . '/api/public/v2/prompts';

@@ -6,6 +6,7 @@ namespace Axyr\Langfuse;
 
 use Axyr\Langfuse\Concerns\CreatesIngestionEvents;
 use Axyr\Langfuse\Config\LangfuseConfig;
+use Axyr\Langfuse\Contracts\DatasetApiClientInterface;
 use Axyr\Langfuse\Contracts\EventBatcherInterface;
 use Axyr\Langfuse\Contracts\LangfuseClientInterface;
 use Axyr\Langfuse\Contracts\MetricsApiClientInterface;
@@ -13,7 +14,10 @@ use Axyr\Langfuse\Contracts\ObservationApiClientInterface;
 use Axyr\Langfuse\Contracts\PromptApiClientInterface;
 use Axyr\Langfuse\Contracts\PromptInterface;
 use Axyr\Langfuse\Contracts\ScoreApiClientInterface;
+use Axyr\Langfuse\Dto\CreateDatasetBody;
 use Axyr\Langfuse\Dto\CreatePromptBody;
+use Axyr\Langfuse\Dto\DatasetListResponse;
+use Axyr\Langfuse\Dto\DatasetResponse;
 use Axyr\Langfuse\Dto\MetricQuery;
 use Axyr\Langfuse\Dto\MetricsResponse;
 use Axyr\Langfuse\Dto\ObservationListResponse;
@@ -44,6 +48,7 @@ class LangfuseClient implements LangfuseClientInterface
         private readonly PromptApiClientInterface $promptApiClient,
         private readonly ObservationApiClientInterface $observationApiClient,
         private readonly MetricsApiClientInterface $metricsApiClient,
+        private readonly DatasetApiClientInterface $datasetApiClient,
     ) {
         $this->currentTrace = new NullLangfuseTrace();
     }
@@ -102,6 +107,21 @@ class LangfuseClient implements LangfuseClientInterface
     public function queryMetrics(MetricQuery $query): ?MetricsResponse
     {
         return $this->metricsApiClient->query($query);
+    }
+
+    public function getDataset(string $datasetName): ?DatasetResponse
+    {
+        return $this->datasetApiClient->get($datasetName);
+    }
+
+    public function listDatasets(?int $page = null, ?int $limit = null): ?DatasetListResponse
+    {
+        return $this->datasetApiClient->list($page, $limit);
+    }
+
+    public function createDataset(CreateDatasetBody $body): ?DatasetResponse
+    {
+        return $this->datasetApiClient->create($body);
     }
 
     public function flush(): void

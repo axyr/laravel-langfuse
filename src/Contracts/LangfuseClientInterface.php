@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace Axyr\Langfuse\Contracts;
 
+use Axyr\Langfuse\Dto\CreateDatasetBody;
 use Axyr\Langfuse\Dto\CreatePromptBody;
+use Axyr\Langfuse\Dto\DatasetListResponse;
+use Axyr\Langfuse\Dto\DatasetResponse;
 use Axyr\Langfuse\Dto\MetricQuery;
 use Axyr\Langfuse\Dto\MetricsResponse;
 use Axyr\Langfuse\Dto\ObservationListResponse;
@@ -39,6 +42,12 @@ interface LangfuseClientInterface
     public function getObservations(?ObservationQuery $query = null): ?ObservationListResponse;
 
     public function queryMetrics(MetricQuery $query): ?MetricsResponse;
+
+    public function getDataset(string $datasetName): ?DatasetResponse;
+
+    public function listDatasets(?int $page = null, ?int $limit = null): ?DatasetListResponse;
+
+    public function createDataset(CreateDatasetBody $body): ?DatasetResponse;
 
     public function flush(): void;
 

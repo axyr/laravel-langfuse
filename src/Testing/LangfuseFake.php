@@ -6,7 +6,10 @@ namespace Axyr\Langfuse\Testing;
 
 use Axyr\Langfuse\Contracts\LangfuseClientInterface;
 use Axyr\Langfuse\Contracts\PromptInterface;
+use Axyr\Langfuse\Dto\CreateDatasetBody;
 use Axyr\Langfuse\Dto\CreatePromptBody;
+use Axyr\Langfuse\Dto\DatasetListResponse;
+use Axyr\Langfuse\Dto\DatasetResponse;
 use Axyr\Langfuse\Dto\IdGenerator;
 use Axyr\Langfuse\Dto\IngestionEvent;
 use Axyr\Langfuse\Dto\MetricQuery;
@@ -46,6 +49,12 @@ class LangfuseFake implements LangfuseClientInterface
 
     /** @var array<int, array<string, mixed>> */
     private array $metricsData = [];
+
+    /** @var array<string, DatasetResponse> */
+    private array $datasetResponsesByName = [];
+
+    /** @var array<CreateDatasetBody> */
+    private array $createdDatasets = [];
 
     /** @var array<CreatePromptBody> */
     private array $createdPrompts = [];
@@ -165,6 +174,52 @@ class LangfuseFake implements LangfuseClientInterface
     public function withMetrics(array $data): self
     {
         $this->metricsData = $data;
+
+        return $this;
+    }
+
+    public function getDataset(string $datasetName): ?DatasetResponse
+    {
+        return $this->datasetResponsesByName[$datasetName] ?? null;
+    }
+
+    public function listDatasets(?int $page = null, ?int $limit = null): ?DatasetListResponse
+    {
+        $data = array_values($this->datasetResponsesByName);
+
+        return new DatasetListResponse(
+            data: $data,
+            meta: new PromptListMeta(
+                totalItems: count($data),
+                totalPages: $data === [] ? 0 : 1,
+                page: $page ?? 1,
+                limit: $limit ?? 10,
+            ),
+        );
+    }
+
+    public function createDataset(CreateDatasetBody $body): ?DatasetResponse
+    {
+        $this->createdDatasets[] = $body;
+
+        return DatasetResponse::fromArray($body->toArray());
+    }
+
+    public function withDataset(DatasetResponse $dataset): self
+    {
+        $this->datasetResponsesByName[$dataset->name] = $dataset;
+
+        return $this;
+    }
+
+    public function assertDatasetCreated(?string $name = null): self
+    {
+        Assert::assertNotEmpty($this->createdDatasets, 'Expected at least one dataset to be created, but none were.');
+
+        if ($name !== null) {
+            $names = array_map(fn(CreateDatasetBody $d): string => $d->name, $this->createdDatasets);
+            Assert::assertContains($name, $names, "Expected a dataset named '{$name}' to be created but it was not.");
+        }
 
         return $this;
     }
