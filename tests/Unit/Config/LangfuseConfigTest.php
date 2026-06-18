@@ -198,7 +198,7 @@ it('generates batch metadata', function () {
     expect($config->batchMetadata(5))->toBe([
         'batch_size' => 5,
         'sdk_name' => 'langfuse-php',
-        'sdk_version' => '2.0.0',
+        'sdk_version' => '2.1.0',
         'public_key' => 'pk-meta',
     ]);
 });

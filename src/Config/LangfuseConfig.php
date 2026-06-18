@@ -97,7 +97,7 @@ readonly class LangfuseConfig
         return [
             'batch_size' => $batchSize,
             'sdk_name' => 'langfuse-php',
-            'sdk_version' => '2.0.0',
+            'sdk_version' => '2.1.0',
             'public_key' => $this->publicKey,
         ];
     }
@@ -110,6 +110,17 @@ readonly class LangfuseConfig
     public function scoresUrl(?string $scoreId = null): string
     {
         $url = rtrim($this->baseUrl, '/') . '/api/public/scores';
+
+        if ($scoreId !== null) {
+            $url .= '/' . urlencode($scoreId);
+        }
+
+        return $url;
+    }
+
+    public function scoresV2Url(?string $scoreId = null): string
+    {
+        $url = rtrim($this->baseUrl, '/') . '/api/public/v2/scores';
 
         if ($scoreId !== null) {
             $url .= '/' . urlencode($scoreId);

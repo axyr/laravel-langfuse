@@ -7,6 +7,9 @@ namespace Axyr\Langfuse\Contracts;
 use Axyr\Langfuse\Dto\CreatePromptBody;
 use Axyr\Langfuse\Dto\PromptListResponse;
 use Axyr\Langfuse\Dto\ScoreBody;
+use Axyr\Langfuse\Dto\ScoreListResponse;
+use Axyr\Langfuse\Dto\ScoreQuery;
+use Axyr\Langfuse\Dto\ScoreResponse;
 use Axyr\Langfuse\Dto\TraceBody;
 use Axyr\Langfuse\Objects\LangfuseTrace;
 
@@ -19,6 +22,10 @@ interface LangfuseClientInterface
     public function setCurrentTrace(LangfuseTrace $trace): void;
 
     public function score(ScoreBody $body): void;
+
+    public function getScore(string $scoreId): ?ScoreResponse;
+
+    public function getScores(?ScoreQuery $query = null): ?ScoreListResponse;
 
     public function deleteScore(string $scoreId): bool;
 

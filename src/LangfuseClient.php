@@ -14,6 +14,9 @@ use Axyr\Langfuse\Contracts\ScoreApiClientInterface;
 use Axyr\Langfuse\Dto\CreatePromptBody;
 use Axyr\Langfuse\Dto\PromptListResponse;
 use Axyr\Langfuse\Dto\ScoreBody;
+use Axyr\Langfuse\Dto\ScoreListResponse;
+use Axyr\Langfuse\Dto\ScoreQuery;
+use Axyr\Langfuse\Dto\ScoreResponse;
 use Axyr\Langfuse\Dto\TraceBody;
 use Axyr\Langfuse\Enums\EventType;
 use Axyr\Langfuse\Objects\LangfuseTrace;
@@ -60,6 +63,16 @@ class LangfuseClient implements LangfuseClientInterface
             type: EventType::ScoreCreate,
             body: $body,
         ));
+    }
+
+    public function getScore(string $scoreId): ?ScoreResponse
+    {
+        return $this->scoreApiClient->get($scoreId);
+    }
+
+    public function getScores(?ScoreQuery $query = null): ?ScoreListResponse
+    {
+        return $this->scoreApiClient->getMany($query);
     }
 
     public function deleteScore(string $scoreId): bool

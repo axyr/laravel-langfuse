@@ -9,8 +9,12 @@ use Axyr\Langfuse\Contracts\PromptInterface;
 use Axyr\Langfuse\Dto\CreatePromptBody;
 use Axyr\Langfuse\Dto\IdGenerator;
 use Axyr\Langfuse\Dto\IngestionEvent;
+use Axyr\Langfuse\Dto\PromptListMeta;
 use Axyr\Langfuse\Dto\PromptListResponse;
 use Axyr\Langfuse\Dto\ScoreBody;
+use Axyr\Langfuse\Dto\ScoreListResponse;
+use Axyr\Langfuse\Dto\ScoreQuery;
+use Axyr\Langfuse\Dto\ScoreResponse;
 use Axyr\Langfuse\Dto\TraceBody;
 use Axyr\Langfuse\Objects\LangfuseTrace;
 use Axyr\Langfuse\Objects\NullLangfuseTrace;
@@ -27,6 +31,9 @@ class LangfuseFake implements LangfuseClientInterface
 
     /** @var array<string> */
     private array $deletedScores = [];
+
+    /** @var array<string, ScoreResponse> */
+    private array $scoreResponsesById = [];
 
     /** @var array<CreatePromptBody> */
     private array $createdPrompts = [];
@@ -67,11 +74,46 @@ class LangfuseFake implements LangfuseClientInterface
         $this->batcher->enqueue($event);
     }
 
+    public function getScore(string $scoreId): ?ScoreResponse
+    {
+        return $this->scoreResponsesById[$scoreId] ?? null;
+    }
+
+    public function getScores(?ScoreQuery $query = null): ?ScoreListResponse
+    {
+        $data = array_values($this->scoreResponsesById);
+
+        $page = 1;
+        $limit = 10;
+
+        if ($query !== null) {
+            $page = $query->page ?? 1;
+            $limit = $query->limit ?? 10;
+        }
+
+        return new ScoreListResponse(
+            data: $data,
+            meta: new PromptListMeta(
+                totalItems: count($data),
+                totalPages: $data === [] ? 0 : 1,
+                page: $page,
+                limit: $limit,
+            ),
+        );
+    }
+
     public function deleteScore(string $scoreId): bool
     {
         $this->deletedScores[] = $scoreId;
 
         return true;
+    }
+
+    public function withScore(ScoreResponse $score): self
+    {
+        $this->scoreResponsesById[$score->id] = $score;
+
+        return $this;
     }
 
     public function flush(): void
