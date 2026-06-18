@@ -31,6 +31,7 @@ function createClient(EventBatcherInterface $batcher, ?LangfuseConfig $config = 
         $promptManager,
         Mockery::mock(ScoreApiClientInterface::class),
         $promptApiClient,
+        Mockery::mock(\Axyr\Langfuse\Contracts\ObservationApiClientInterface::class),
     );
 }
 

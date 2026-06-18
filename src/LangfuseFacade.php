@@ -16,6 +16,8 @@ use Illuminate\Support\Facades\Facade;
  * @method static \Axyr\Langfuse\Dto\ScoreResponse|null getScore(string $scoreId)
  * @method static \Axyr\Langfuse\Dto\ScoreListResponse|null getScores(?\Axyr\Langfuse\Dto\ScoreQuery $query = null)
  * @method static bool deleteScore(string $scoreId)
+ * @method static \Axyr\Langfuse\Dto\ObservationResponse|null getObservation(string $observationId)
+ * @method static \Axyr\Langfuse\Dto\ObservationListResponse|null getObservations(?\Axyr\Langfuse\Dto\ObservationQuery $query = null)
  * @method static void flush()
  * @method static bool isEnabled()
  * @method static \Axyr\Langfuse\Contracts\PromptInterface prompt(string $name, ?int $version = null, ?string $label = null, string|array<int, array<string, string>>|null $fallback = null)

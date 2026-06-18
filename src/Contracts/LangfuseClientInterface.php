@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace Axyr\Langfuse\Contracts;
 
 use Axyr\Langfuse\Dto\CreatePromptBody;
+use Axyr\Langfuse\Dto\ObservationListResponse;
+use Axyr\Langfuse\Dto\ObservationQuery;
+use Axyr\Langfuse\Dto\ObservationResponse;
 use Axyr\Langfuse\Dto\PromptListResponse;
 use Axyr\Langfuse\Dto\ScoreBody;
 use Axyr\Langfuse\Dto\ScoreListResponse;
@@ -28,6 +31,10 @@ interface LangfuseClientInterface
     public function getScores(?ScoreQuery $query = null): ?ScoreListResponse;
 
     public function deleteScore(string $scoreId): bool;
+
+    public function getObservation(string $observationId): ?ObservationResponse;
+
+    public function getObservations(?ObservationQuery $query = null): ?ObservationListResponse;
 
     public function flush(): void;
 

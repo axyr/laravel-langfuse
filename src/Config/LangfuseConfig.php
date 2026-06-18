@@ -129,6 +129,22 @@ readonly class LangfuseConfig
         return $url;
     }
 
+    public function observationsUrl(?string $observationId = null): string
+    {
+        $url = rtrim($this->baseUrl, '/') . '/api/public/observations';
+
+        if ($observationId !== null) {
+            $url .= '/' . urlencode($observationId);
+        }
+
+        return $url;
+    }
+
+    public function observationsV2Url(): string
+    {
+        return rtrim($this->baseUrl, '/') . '/api/public/v2/observations';
+    }
+
     public function promptsUrl(?string $name = null): string
     {
         $url = rtrim($this->baseUrl, '/') . '/api/public/v2/prompts';

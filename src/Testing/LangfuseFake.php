@@ -9,6 +9,10 @@ use Axyr\Langfuse\Contracts\PromptInterface;
 use Axyr\Langfuse\Dto\CreatePromptBody;
 use Axyr\Langfuse\Dto\IdGenerator;
 use Axyr\Langfuse\Dto\IngestionEvent;
+use Axyr\Langfuse\Dto\ObservationListMeta;
+use Axyr\Langfuse\Dto\ObservationListResponse;
+use Axyr\Langfuse\Dto\ObservationQuery;
+use Axyr\Langfuse\Dto\ObservationResponse;
 use Axyr\Langfuse\Dto\PromptListMeta;
 use Axyr\Langfuse\Dto\PromptListResponse;
 use Axyr\Langfuse\Dto\ScoreBody;
@@ -34,6 +38,9 @@ class LangfuseFake implements LangfuseClientInterface
 
     /** @var array<string, ScoreResponse> */
     private array $scoreResponsesById = [];
+
+    /** @var array<string, ObservationResponse> */
+    private array $observationResponsesById = [];
 
     /** @var array<CreatePromptBody> */
     private array $createdPrompts = [];
@@ -112,6 +119,32 @@ class LangfuseFake implements LangfuseClientInterface
     public function withScore(ScoreResponse $score): self
     {
         $this->scoreResponsesById[$score->id] = $score;
+
+        return $this;
+    }
+
+    public function getObservation(string $observationId): ?ObservationResponse
+    {
+        return $this->observationResponsesById[$observationId] ?? null;
+    }
+
+    public function getObservations(?ObservationQuery $query = null): ?ObservationListResponse
+    {
+        $data = array_values($this->observationResponsesById);
+
+        if ($query !== null && $query->limit !== null) {
+            $data = array_slice($data, 0, $query->limit);
+        }
+
+        return new ObservationListResponse(
+            data: $data,
+            meta: new ObservationListMeta(),
+        );
+    }
+
+    public function withObservation(ObservationResponse $observation): self
+    {
+        $this->observationResponsesById[$observation->id] = $observation;
 
         return $this;
     }
