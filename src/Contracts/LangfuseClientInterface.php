@@ -6,12 +6,17 @@ namespace Axyr\Langfuse\Contracts;
 
 use Axyr\Langfuse\Dto\CreateDatasetBody;
 use Axyr\Langfuse\Dto\CreateDatasetItemBody;
+use Axyr\Langfuse\Dto\CreateDatasetRunItemBody;
 use Axyr\Langfuse\Dto\CreatePromptBody;
 use Axyr\Langfuse\Dto\DatasetItemListResponse;
 use Axyr\Langfuse\Dto\DatasetItemQuery;
 use Axyr\Langfuse\Dto\DatasetItemResponse;
 use Axyr\Langfuse\Dto\DatasetListResponse;
 use Axyr\Langfuse\Dto\DatasetResponse;
+use Axyr\Langfuse\Dto\DatasetRunItemListResponse;
+use Axyr\Langfuse\Dto\DatasetRunItemResponse;
+use Axyr\Langfuse\Dto\DatasetRunListResponse;
+use Axyr\Langfuse\Dto\DatasetRunWithItemsResponse;
 use Axyr\Langfuse\Dto\MetricQuery;
 use Axyr\Langfuse\Dto\MetricsResponse;
 use Axyr\Langfuse\Dto\ObservationListResponse;
@@ -60,6 +65,16 @@ interface LangfuseClientInterface
     public function createDatasetItem(CreateDatasetItemBody $body): ?DatasetItemResponse;
 
     public function deleteDatasetItem(string $id): bool;
+
+    public function getDatasetRun(string $datasetName, string $runName): ?DatasetRunWithItemsResponse;
+
+    public function listDatasetRuns(string $datasetName, ?int $page = null, ?int $limit = null): ?DatasetRunListResponse;
+
+    public function deleteDatasetRun(string $datasetName, string $runName): bool;
+
+    public function createDatasetRunItem(CreateDatasetRunItemBody $body): ?DatasetRunItemResponse;
+
+    public function listDatasetRunItems(string $datasetId, string $runName, ?int $page = null, ?int $limit = null): ?DatasetRunItemListResponse;
 
     public function flush(): void;
 

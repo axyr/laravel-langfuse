@@ -48,6 +48,7 @@ function makeLangfuseClient(): array
         Mockery::mock(\Axyr\Langfuse\Contracts\MetricsApiClientInterface::class),
         Mockery::mock(\Axyr\Langfuse\Contracts\DatasetApiClientInterface::class),
         Mockery::mock(\Axyr\Langfuse\Contracts\DatasetItemApiClientInterface::class),
+        Mockery::mock(\Axyr\Langfuse\Contracts\DatasetRunApiClientInterface::class),
     );
 
     return [$client, $batcher];

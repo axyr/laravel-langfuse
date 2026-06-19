@@ -172,6 +172,22 @@ readonly class LangfuseConfig
         return $url;
     }
 
+    public function datasetRunsUrl(string $datasetName, ?string $runName = null): string
+    {
+        $url = rtrim($this->baseUrl, '/') . '/api/public/datasets/' . urlencode($datasetName) . '/runs';
+
+        if ($runName !== null) {
+            $url .= '/' . urlencode($runName);
+        }
+
+        return $url;
+    }
+
+    public function datasetRunItemsUrl(): string
+    {
+        return rtrim($this->baseUrl, '/') . '/api/public/dataset-run-items';
+    }
+
     public function promptsUrl(?string $name = null): string
     {
         $url = rtrim($this->baseUrl, '/') . '/api/public/v2/prompts';

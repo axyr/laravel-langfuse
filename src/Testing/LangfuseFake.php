@@ -8,12 +8,18 @@ use Axyr\Langfuse\Contracts\LangfuseClientInterface;
 use Axyr\Langfuse\Contracts\PromptInterface;
 use Axyr\Langfuse\Dto\CreateDatasetBody;
 use Axyr\Langfuse\Dto\CreateDatasetItemBody;
+use Axyr\Langfuse\Dto\CreateDatasetRunItemBody;
 use Axyr\Langfuse\Dto\CreatePromptBody;
 use Axyr\Langfuse\Dto\DatasetItemListResponse;
 use Axyr\Langfuse\Dto\DatasetItemQuery;
 use Axyr\Langfuse\Dto\DatasetItemResponse;
 use Axyr\Langfuse\Dto\DatasetListResponse;
 use Axyr\Langfuse\Dto\DatasetResponse;
+use Axyr\Langfuse\Dto\DatasetRunItemListResponse;
+use Axyr\Langfuse\Dto\DatasetRunItemResponse;
+use Axyr\Langfuse\Dto\DatasetRunListResponse;
+use Axyr\Langfuse\Dto\DatasetRunResponse;
+use Axyr\Langfuse\Dto\DatasetRunWithItemsResponse;
 use Axyr\Langfuse\Dto\IdGenerator;
 use Axyr\Langfuse\Dto\IngestionEvent;
 use Axyr\Langfuse\Dto\MetricQuery;
@@ -66,6 +72,12 @@ class LangfuseFake implements LangfuseClientInterface
     /** @var array<CreateDatasetItemBody> */
     private array $createdDatasetItems = [];
 
+    /** @var array<string, DatasetRunWithItemsResponse> */
+    private array $datasetRunsByName = [];
+
+    /** @var array<CreateDatasetRunItemBody> */
+    private array $createdDatasetRunItems = [];
+
     /** @var array<CreatePromptBody> */
     private array $createdPrompts = [];
 
@@ -114,23 +126,7 @@ class LangfuseFake implements LangfuseClientInterface
     {
         $data = array_values($this->scoreResponsesById);
 
-        $page = 1;
-        $limit = 10;
-
-        if ($query !== null) {
-            $page = $query->page ?? 1;
-            $limit = $query->limit ?? 10;
-        }
-
-        return new ScoreListResponse(
-            data: $data,
-            meta: new PromptListMeta(
-                totalItems: count($data),
-                totalPages: $data === [] ? 0 : 1,
-                page: $page,
-                limit: $limit,
-            ),
-        );
+        return new ScoreListResponse($data, $this->fakeListMeta(count($data), $query?->page, $query?->limit));
     }
 
     public function deleteScore(string $scoreId): bool
@@ -154,14 +150,8 @@ class LangfuseFake implements LangfuseClientInterface
 
     public function getObservations(?ObservationQuery $query = null): ?ObservationListResponse
     {
-        $data = array_values($this->observationResponsesById);
-
-        if ($query !== null && $query->limit !== null) {
-            $data = array_slice($data, 0, $query->limit);
-        }
-
         return new ObservationListResponse(
-            data: $data,
+            data: array_values($this->observationResponsesById),
             meta: new ObservationListMeta(),
         );
     }
@@ -197,15 +187,7 @@ class LangfuseFake implements LangfuseClientInterface
     {
         $data = array_values($this->datasetResponsesByName);
 
-        return new DatasetListResponse(
-            data: $data,
-            meta: new PromptListMeta(
-                totalItems: count($data),
-                totalPages: $data === [] ? 0 : 1,
-                page: $page ?? 1,
-                limit: $limit ?? 10,
-            ),
-        );
+        return new DatasetListResponse($data, $this->fakeListMeta(count($data), $page, $limit));
     }
 
     public function createDataset(CreateDatasetBody $body): ?DatasetResponse
@@ -243,23 +225,7 @@ class LangfuseFake implements LangfuseClientInterface
     {
         $data = array_values($this->datasetItemResponsesById);
 
-        $page = 1;
-        $limit = 10;
-
-        if ($query !== null) {
-            $page = $query->page ?? 1;
-            $limit = $query->limit ?? 10;
-        }
-
-        return new DatasetItemListResponse(
-            data: $data,
-            meta: new PromptListMeta(
-                totalItems: count($data),
-                totalPages: $data === [] ? 0 : 1,
-                page: $page,
-                limit: $limit,
-            ),
-        );
+        return new DatasetItemListResponse($data, $this->fakeListMeta(count($data), $query?->page, $query?->limit));
     }
 
     public function createDatasetItem(CreateDatasetItemBody $body): ?DatasetItemResponse
@@ -291,6 +257,70 @@ class LangfuseFake implements LangfuseClientInterface
         }
 
         return $this;
+    }
+
+    public function getDatasetRun(string $datasetName, string $runName): ?DatasetRunWithItemsResponse
+    {
+        return $this->datasetRunsByName[$runName] ?? null;
+    }
+
+    public function listDatasetRuns(string $datasetName, ?int $page = null, ?int $limit = null): ?DatasetRunListResponse
+    {
+        $data = array_map(
+            fn(DatasetRunWithItemsResponse $run): DatasetRunResponse => $run->run,
+            array_values($this->datasetRunsByName),
+        );
+
+        return new DatasetRunListResponse($data, $this->fakeListMeta(count($data), $page, $limit));
+    }
+
+    public function deleteDatasetRun(string $datasetName, string $runName): bool
+    {
+        return true;
+    }
+
+    public function createDatasetRunItem(CreateDatasetRunItemBody $body): ?DatasetRunItemResponse
+    {
+        $this->createdDatasetRunItems[] = $body;
+
+        return DatasetRunItemResponse::fromArray($body->toArray());
+    }
+
+    public function listDatasetRunItems(string $datasetId, string $runName, ?int $page = null, ?int $limit = null): ?DatasetRunItemListResponse
+    {
+        $run = $this->datasetRunsByName[$runName] ?? null;
+        $data = $run !== null ? $run->datasetRunItems : [];
+
+        return new DatasetRunItemListResponse($data, $this->fakeListMeta(count($data), $page, $limit));
+    }
+
+    public function withDatasetRun(DatasetRunWithItemsResponse $run): self
+    {
+        $this->datasetRunsByName[$run->run->name] = $run;
+
+        return $this;
+    }
+
+    public function assertDatasetRunItemCreated(?string $runName = null): self
+    {
+        Assert::assertNotEmpty($this->createdDatasetRunItems, 'Expected at least one dataset run item to be created, but none were.');
+
+        if ($runName !== null) {
+            $names = array_map(fn(CreateDatasetRunItemBody $i): string => $i->runName, $this->createdDatasetRunItems);
+            Assert::assertContains($runName, $names, "Expected a dataset run item for run '{$runName}' to be created but it was not.");
+        }
+
+        return $this;
+    }
+
+    private function fakeListMeta(int $count, ?int $page, ?int $limit): PromptListMeta
+    {
+        return new PromptListMeta(
+            totalItems: $count,
+            totalPages: $count === 0 ? 0 : 1,
+            page: $page ?? 1,
+            limit: $limit ?? 10,
+        );
     }
 
     public function flush(): void
