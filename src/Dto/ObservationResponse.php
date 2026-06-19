@@ -6,6 +6,12 @@ namespace Axyr\Langfuse\Dto;
 
 use Axyr\Langfuse\Enums\ObservationLevel;
 
+/**
+ * Curated projection of the ObservationsView / ObservationV2 schemas; the wide
+ * constructor maps the response fields one-to-one and is intentional.
+ *
+ * @SuppressWarnings("PHPMD.ExcessiveParameterList")
+ */
 readonly class ObservationResponse
 {
     /**

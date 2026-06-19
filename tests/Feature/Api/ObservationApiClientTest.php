@@ -106,3 +106,21 @@ it('returns null when fetching many observations errors', function () {
 
     expect($client->getMany())->toBeNull();
 });
+
+it('serialises array filters as repeated bare query keys', function () {
+    Http::fake([
+        'test.langfuse.com/api/public/v2/observations*' => Http::response(ObservationFixtures::v2List()),
+    ]);
+
+    $client = new ObservationApiClient($this->config);
+    $client->getMany(new ObservationQuery(environment: ['prod', 'staging']));
+
+    Http::assertSent(function ($request) {
+        $url = $request->url();
+
+        return str_contains($url, 'environment=prod')
+            && str_contains($url, 'environment=staging')
+            && ! str_contains($url, 'environment%5B0%5D')
+            && ! str_contains($url, 'environment[0]');
+    });
+});

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Axyr\Langfuse\Api;
 
+use Axyr\Langfuse\Api\Concerns\SerializesQueryParameters;
 use Axyr\Langfuse\Config\LangfuseConfig;
 use Axyr\Langfuse\Contracts\ScoreApiClientInterface;
 use Axyr\Langfuse\Dto\ScoreListResponse;
@@ -14,6 +15,8 @@ use Illuminate\Support\Facades\Log;
 
 class ScoreApiClient implements ScoreApiClientInterface
 {
+    use SerializesQueryParameters;
+
     public function __construct(
         private readonly LangfuseConfig $config,
     ) {}
@@ -77,12 +80,14 @@ class ScoreApiClient implements ScoreApiClientInterface
 
     private function doGetMany(?ScoreQuery $query): ?ScoreListResponse
     {
+        $queryString = $this->buildQueryString($query?->toQuery() ?? []);
+
         $response = Http::withHeaders([
             'Authorization' => $this->config->authHeader(),
             'Content-Type' => 'application/json',
         ])
             ->timeout($this->config->requestTimeout)
-            ->get($this->config->scoresV2Url(), $query?->toQuery() ?? []);
+            ->get($this->config->scoresV2Url(), $queryString === '' ? [] : $queryString);
 
         if (! $response->successful()) {
             Log::warning('Langfuse score list failed', [
@@ -100,6 +105,9 @@ class ScoreApiClient implements ScoreApiClientInterface
 
     private function doDelete(string $scoreId): bool
     {
+        // Intentional: reads (get/getMany) use the v2 scores endpoint, but the
+        // spec only exposes DELETE on the v1 endpoint (scoresUrl, not
+        // scoresV2Url). Do not "consolidate" this onto v2 - there is no v2 DELETE.
         $response = Http::withHeaders([
             'Authorization' => $this->config->authHeader(),
         ])

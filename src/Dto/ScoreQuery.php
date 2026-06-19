@@ -4,6 +4,12 @@ declare(strict_types=1);
 
 namespace Axyr\Langfuse\Dto;
 
+/**
+ * Mirrors the many optional filters of GET /api/public/v2/scores; a wide
+ * constructor of nullable named parameters is intentional.
+ *
+ * @SuppressWarnings("PHPMD.ExcessiveParameterList")
+ */
 readonly class ScoreQuery
 {
     /**

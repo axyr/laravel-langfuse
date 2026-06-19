@@ -144,3 +144,22 @@ it('returns null when fetching many scores errors', function () {
 
     expect($client->getMany())->toBeNull();
 });
+
+it('serialises array filters as repeated bare query keys', function () {
+    Http::fake([
+        'test.langfuse.com/api/public/v2/scores*' => Http::response(ScoreFixtures::scoreList()),
+    ]);
+
+    $client = new ScoreApiClient($this->config);
+    $client->getMany(new ScoreQuery(environment: ['prod', 'staging'], traceTags: ['v2']));
+
+    Http::assertSent(function ($request) {
+        $url = $request->url();
+
+        return str_contains($url, 'environment=prod')
+            && str_contains($url, 'environment=staging')
+            && str_contains($url, 'traceTags=v2')
+            && ! str_contains($url, 'environment%5B0%5D')
+            && ! str_contains($url, 'environment[0]');
+    });
+});

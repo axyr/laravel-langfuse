@@ -4,6 +4,12 @@ declare(strict_types=1);
 
 namespace Axyr\Langfuse\Dto;
 
+/**
+ * Mirrors the Score schema; the wide constructor maps the response fields
+ * one-to-one and is intentional.
+ *
+ * @SuppressWarnings("PHPMD.ExcessiveParameterList")
+ */
 readonly class ScoreResponse
 {
     public function __construct(

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Axyr\Langfuse\Api;
 
+use Axyr\Langfuse\Api\Concerns\SerializesQueryParameters;
 use Axyr\Langfuse\Config\LangfuseConfig;
 use Axyr\Langfuse\Contracts\ObservationApiClientInterface;
 use Axyr\Langfuse\Dto\ObservationListResponse;
@@ -14,6 +15,8 @@ use Illuminate\Support\Facades\Log;
 
 class ObservationApiClient implements ObservationApiClientInterface
 {
+    use SerializesQueryParameters;
+
     public function __construct(
         private readonly LangfuseConfig $config,
     ) {}
@@ -66,12 +69,14 @@ class ObservationApiClient implements ObservationApiClientInterface
 
     private function doGetMany(?ObservationQuery $query): ?ObservationListResponse
     {
+        $queryString = $this->buildQueryString($query?->toQuery() ?? []);
+
         $response = Http::withHeaders([
             'Authorization' => $this->config->authHeader(),
             'Content-Type' => 'application/json',
         ])
             ->timeout($this->config->requestTimeout)
-            ->get($this->config->observationsV2Url(), $query?->toQuery() ?? []);
+            ->get($this->config->observationsV2Url(), $queryString === '' ? [] : $queryString);
 
         if (! $response->successful()) {
             Log::warning('Langfuse observation list failed', [

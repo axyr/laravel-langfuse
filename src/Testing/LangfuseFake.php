@@ -39,6 +39,12 @@ use Axyr\Langfuse\Objects\LangfuseTrace;
 use Axyr\Langfuse\Objects\NullLangfuseTrace;
 use PHPUnit\Framework\Assert;
 
+/**
+ * Test double mirroring the full LangfuseClientInterface; its weighted method
+ * count scales with the interface and is expected to be high.
+ *
+ * @SuppressWarnings("PHPMD.ExcessiveClassComplexity")
+ */
 class LangfuseFake implements LangfuseClientInterface
 {
     private readonly RecordingEventBatcher $batcher;

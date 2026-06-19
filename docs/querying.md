@@ -7,9 +7,13 @@ full datasets → runs → run-items evaluation workflow. Every method here call
 Langfuse public REST API (never the database).
 
 All read methods are **resilient**: on a network error or non-2xx response they log a
-warning and return `null` (or an empty list DTO). They never throw into your
-application, so it is safe to call them inline without `try`/`catch`. Always
-null-check the result.
+warning and return `null`. They never throw into your application, so it is safe to
+call them inline without `try`/`catch`. Always null-check the result.
+
+A `null` return always means **the fetch failed** (network error or non-2xx). It is
+distinct from a *successful* list query that simply has no matches - that returns a
+list DTO whose `data` array is empty (not `null`). Consumers should treat the two
+cases differently: retry/alert on `null`, treat empty `data` as "no results".
 
 Examples use the `Langfuse` facade; the same methods exist on the injected
 `Axyr\Langfuse\Contracts\LangfuseClientInterface`.
