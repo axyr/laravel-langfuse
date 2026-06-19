@@ -83,6 +83,7 @@ Full documentation in the [`docs/`](docs/README.md) directory:
 - [Spans and Events](docs/spans-and-events.md) - non-LLM work, event logging
 - [Scores](docs/scores.md) - numeric, boolean, categorical scores
 - [Prompt Management](docs/prompt-management.md) - fetch, cache, compile, create
+- [Querying (read API)](docs/querying.md) - read scores/observations, metrics, and the evaluation workflow
 - [Integrations](docs/integrations/prism.md) - Prism, Laravel AI, Neuron AI
 - [Middleware](docs/middleware.md) - request trace context
 - [Batching and Flushing](docs/batching-and-flushing.md) - flush control, queued dispatch

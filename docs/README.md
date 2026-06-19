@@ -12,6 +12,7 @@ For installation and quick start, see the [main README](../README.md).
 - [Spans and Events](spans-and-events.md) - spans for non-LLM work, lightweight event logging
 - [Scores](scores.md) - numeric, boolean, and categorical quality scores
 - [Prompt Management](prompt-management.md) - fetch, cache, compile, create, and list prompts
+- [Querying (read API)](querying.md) - read scores/observations, the metrics/query API, and the datasets → runs → run-items evaluation workflow
 - **Integrations**
   - [Prism](integrations/prism.md) - auto-instrumentation for Prism LLM calls
   - [Laravel AI](integrations/laravel-ai.md) - auto-instrumentation for the Laravel AI SDK

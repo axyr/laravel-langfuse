@@ -34,6 +34,8 @@ use Illuminate\Support\Facades\Facade;
  * @method static void flush()
  * @method static bool isEnabled()
  * @method static \Axyr\Langfuse\Contracts\PromptInterface prompt(string $name, ?int $version = null, ?string $label = null, string|array<int, array<string, string>>|null $fallback = null)
+ * @method static \Axyr\Langfuse\Contracts\PromptInterface|null createPrompt(\Axyr\Langfuse\Dto\CreatePromptBody $body)
+ * @method static \Axyr\Langfuse\Dto\PromptListResponse|null listPrompts(?string $name = null, ?string $label = null, ?int $page = null, ?int $limit = null)
  *
  * @see \Axyr\Langfuse\LangfuseClient
  */
