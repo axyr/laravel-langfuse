@@ -13,7 +13,9 @@ vendor/bin/phpstan analyse
 
 echo ""
 echo "==> PHPMD (complexity)"
-vendor/bin/phpmd src text phpmd.xml
+# Suppress PHP 8.4 E_DEPRECATED notices emitted by the phpmd/pdepend vendor code
+# (implicit-nullable params). Real violations still set a non-zero exit code.
+php -d error_reporting='E_ALL & ~E_DEPRECATED' vendor/bin/phpmd src text phpmd.xml
 
 echo ""
 echo "==> Pest (tests)"
