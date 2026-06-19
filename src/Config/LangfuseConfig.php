@@ -161,6 +161,17 @@ readonly class LangfuseConfig
         return $url;
     }
 
+    public function datasetItemsUrl(?string $id = null): string
+    {
+        $url = rtrim($this->baseUrl, '/') . '/api/public/dataset-items';
+
+        if ($id !== null) {
+            $url .= '/' . urlencode($id);
+        }
+
+        return $url;
+    }
+
     public function promptsUrl(?string $name = null): string
     {
         $url = rtrim($this->baseUrl, '/') . '/api/public/v2/prompts';

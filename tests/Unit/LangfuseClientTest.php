@@ -34,6 +34,7 @@ function createClient(EventBatcherInterface $batcher, ?LangfuseConfig $config = 
         Mockery::mock(\Axyr\Langfuse\Contracts\ObservationApiClientInterface::class),
         Mockery::mock(\Axyr\Langfuse\Contracts\MetricsApiClientInterface::class),
         Mockery::mock(\Axyr\Langfuse\Contracts\DatasetApiClientInterface::class),
+        Mockery::mock(\Axyr\Langfuse\Contracts\DatasetItemApiClientInterface::class),
     );
 }
 

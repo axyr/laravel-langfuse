@@ -42,6 +42,7 @@ arch('only api clients use Http facade')
         'Axyr\\Langfuse\\Api\ObservationApiClient',
         'Axyr\\Langfuse\\Api\MetricsApiClient',
         'Axyr\\Langfuse\\Api\DatasetApiClient',
+        'Axyr\\Langfuse\\Api\DatasetItemApiClient',
     ]);
 
 arch('facade extends base facade')

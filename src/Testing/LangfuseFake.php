@@ -7,7 +7,11 @@ namespace Axyr\Langfuse\Testing;
 use Axyr\Langfuse\Contracts\LangfuseClientInterface;
 use Axyr\Langfuse\Contracts\PromptInterface;
 use Axyr\Langfuse\Dto\CreateDatasetBody;
+use Axyr\Langfuse\Dto\CreateDatasetItemBody;
 use Axyr\Langfuse\Dto\CreatePromptBody;
+use Axyr\Langfuse\Dto\DatasetItemListResponse;
+use Axyr\Langfuse\Dto\DatasetItemQuery;
+use Axyr\Langfuse\Dto\DatasetItemResponse;
 use Axyr\Langfuse\Dto\DatasetListResponse;
 use Axyr\Langfuse\Dto\DatasetResponse;
 use Axyr\Langfuse\Dto\IdGenerator;
@@ -55,6 +59,12 @@ class LangfuseFake implements LangfuseClientInterface
 
     /** @var array<CreateDatasetBody> */
     private array $createdDatasets = [];
+
+    /** @var array<string, DatasetItemResponse> */
+    private array $datasetItemResponsesById = [];
+
+    /** @var array<CreateDatasetItemBody> */
+    private array $createdDatasetItems = [];
 
     /** @var array<CreatePromptBody> */
     private array $createdPrompts = [];
@@ -219,6 +229,65 @@ class LangfuseFake implements LangfuseClientInterface
         if ($name !== null) {
             $names = array_map(fn(CreateDatasetBody $d): string => $d->name, $this->createdDatasets);
             Assert::assertContains($name, $names, "Expected a dataset named '{$name}' to be created but it was not.");
+        }
+
+        return $this;
+    }
+
+    public function getDatasetItem(string $id): ?DatasetItemResponse
+    {
+        return $this->datasetItemResponsesById[$id] ?? null;
+    }
+
+    public function listDatasetItems(?DatasetItemQuery $query = null): ?DatasetItemListResponse
+    {
+        $data = array_values($this->datasetItemResponsesById);
+
+        $page = 1;
+        $limit = 10;
+
+        if ($query !== null) {
+            $page = $query->page ?? 1;
+            $limit = $query->limit ?? 10;
+        }
+
+        return new DatasetItemListResponse(
+            data: $data,
+            meta: new PromptListMeta(
+                totalItems: count($data),
+                totalPages: $data === [] ? 0 : 1,
+                page: $page,
+                limit: $limit,
+            ),
+        );
+    }
+
+    public function createDatasetItem(CreateDatasetItemBody $body): ?DatasetItemResponse
+    {
+        $this->createdDatasetItems[] = $body;
+
+        return DatasetItemResponse::fromArray($body->toArray());
+    }
+
+    public function deleteDatasetItem(string $id): bool
+    {
+        return true;
+    }
+
+    public function withDatasetItem(DatasetItemResponse $item): self
+    {
+        $this->datasetItemResponsesById[$item->id] = $item;
+
+        return $this;
+    }
+
+    public function assertDatasetItemCreated(?string $datasetName = null): self
+    {
+        Assert::assertNotEmpty($this->createdDatasetItems, 'Expected at least one dataset item to be created, but none were.');
+
+        if ($datasetName !== null) {
+            $names = array_map(fn(CreateDatasetItemBody $i): string => $i->datasetName, $this->createdDatasetItems);
+            Assert::assertContains($datasetName, $names, "Expected a dataset item for dataset '{$datasetName}' to be created but it was not.");
         }
 
         return $this;

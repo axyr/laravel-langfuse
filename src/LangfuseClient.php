@@ -7,6 +7,7 @@ namespace Axyr\Langfuse;
 use Axyr\Langfuse\Concerns\CreatesIngestionEvents;
 use Axyr\Langfuse\Config\LangfuseConfig;
 use Axyr\Langfuse\Contracts\DatasetApiClientInterface;
+use Axyr\Langfuse\Contracts\DatasetItemApiClientInterface;
 use Axyr\Langfuse\Contracts\EventBatcherInterface;
 use Axyr\Langfuse\Contracts\LangfuseClientInterface;
 use Axyr\Langfuse\Contracts\MetricsApiClientInterface;
@@ -15,7 +16,11 @@ use Axyr\Langfuse\Contracts\PromptApiClientInterface;
 use Axyr\Langfuse\Contracts\PromptInterface;
 use Axyr\Langfuse\Contracts\ScoreApiClientInterface;
 use Axyr\Langfuse\Dto\CreateDatasetBody;
+use Axyr\Langfuse\Dto\CreateDatasetItemBody;
 use Axyr\Langfuse\Dto\CreatePromptBody;
+use Axyr\Langfuse\Dto\DatasetItemListResponse;
+use Axyr\Langfuse\Dto\DatasetItemQuery;
+use Axyr\Langfuse\Dto\DatasetItemResponse;
 use Axyr\Langfuse\Dto\DatasetListResponse;
 use Axyr\Langfuse\Dto\DatasetResponse;
 use Axyr\Langfuse\Dto\MetricQuery;
@@ -49,6 +54,7 @@ class LangfuseClient implements LangfuseClientInterface
         private readonly ObservationApiClientInterface $observationApiClient,
         private readonly MetricsApiClientInterface $metricsApiClient,
         private readonly DatasetApiClientInterface $datasetApiClient,
+        private readonly DatasetItemApiClientInterface $datasetItemApiClient,
     ) {
         $this->currentTrace = new NullLangfuseTrace();
     }
@@ -122,6 +128,26 @@ class LangfuseClient implements LangfuseClientInterface
     public function createDataset(CreateDatasetBody $body): ?DatasetResponse
     {
         return $this->datasetApiClient->create($body);
+    }
+
+    public function getDatasetItem(string $id): ?DatasetItemResponse
+    {
+        return $this->datasetItemApiClient->get($id);
+    }
+
+    public function listDatasetItems(?DatasetItemQuery $query = null): ?DatasetItemListResponse
+    {
+        return $this->datasetItemApiClient->list($query);
+    }
+
+    public function createDatasetItem(CreateDatasetItemBody $body): ?DatasetItemResponse
+    {
+        return $this->datasetItemApiClient->create($body);
+    }
+
+    public function deleteDatasetItem(string $id): bool
+    {
+        return $this->datasetItemApiClient->delete($id);
     }
 
     public function flush(): void

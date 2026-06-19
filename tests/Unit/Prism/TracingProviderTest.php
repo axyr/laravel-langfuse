@@ -42,6 +42,7 @@ function makeTracingClient(): array
         Mockery::mock(\Axyr\Langfuse\Contracts\ObservationApiClientInterface::class),
         Mockery::mock(\Axyr\Langfuse\Contracts\MetricsApiClientInterface::class),
         Mockery::mock(\Axyr\Langfuse\Contracts\DatasetApiClientInterface::class),
+        Mockery::mock(\Axyr\Langfuse\Contracts\DatasetItemApiClientInterface::class),
     );
 
     return [$client, $batcher];

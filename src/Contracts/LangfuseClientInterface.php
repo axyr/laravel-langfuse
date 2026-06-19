@@ -5,7 +5,11 @@ declare(strict_types=1);
 namespace Axyr\Langfuse\Contracts;
 
 use Axyr\Langfuse\Dto\CreateDatasetBody;
+use Axyr\Langfuse\Dto\CreateDatasetItemBody;
 use Axyr\Langfuse\Dto\CreatePromptBody;
+use Axyr\Langfuse\Dto\DatasetItemListResponse;
+use Axyr\Langfuse\Dto\DatasetItemQuery;
+use Axyr\Langfuse\Dto\DatasetItemResponse;
 use Axyr\Langfuse\Dto\DatasetListResponse;
 use Axyr\Langfuse\Dto\DatasetResponse;
 use Axyr\Langfuse\Dto\MetricQuery;
@@ -48,6 +52,14 @@ interface LangfuseClientInterface
     public function listDatasets(?int $page = null, ?int $limit = null): ?DatasetListResponse;
 
     public function createDataset(CreateDatasetBody $body): ?DatasetResponse;
+
+    public function getDatasetItem(string $id): ?DatasetItemResponse;
+
+    public function listDatasetItems(?DatasetItemQuery $query = null): ?DatasetItemListResponse;
+
+    public function createDatasetItem(CreateDatasetItemBody $body): ?DatasetItemResponse;
+
+    public function deleteDatasetItem(string $id): bool;
 
     public function flush(): void;
 
