@@ -40,7 +40,7 @@
         "analyse": "phpstan analyse",
         "format": "pint",
         "format:test": "pint --test",
-        "complexity": "phpmd src text phpmd.xml 2>&1 | grep -v 'Deprecated:' | grep -v 'PHP Deprecated:' || true",
+        "complexity": "php -d error_reporting='E_ALL & ~E_DEPRECATED' vendor/bin/phpmd src text phpmd.xml",
         "quality": [
             "@format:test",
             "@analyse",
@@ -54,7 +54,7 @@
             "@install-hooks"
         ],
         "install-hooks": [
-            "bash -c 'if [ -d .git ]; then cp hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit && echo \"Pre-commit hook installed\"; fi'"
+            "bash -c 'if [ -d .git ]; then git config core.hooksPath .githooks && echo \"Pre-commit hook configured (core.hooksPath=.githooks)\"; fi'"
         ]
     },
     "config": {
