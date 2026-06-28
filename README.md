@@ -37,6 +37,7 @@ Events are batched and flushed automatically. Zero-code auto-instrumentation is 
 ## Features
 
 - **Full observability** - traces, spans, generations, events, and scores with automatic parent-child nesting
+- **Read & evaluate** - query scores, observations, and metrics, and manage datasets, runs, and run-items to build evaluation workflows ([read API](docs/querying.md))
 - **Prompt management** - fetch, cache, compile, create, and list prompts with stale-while-revalidate caching
 - **Auto-instrumentation** - zero-code tracing for Prism, Laravel AI, and Neuron AI
 - **Automatic batching** - events queued and sent in batches, with optional async dispatch via Laravel queues
@@ -90,6 +91,8 @@ Full documentation in the [`docs/`](docs/README.md) directory:
 - [Testing](docs/testing.md) - fakes and assertions
 - [Architecture](docs/architecture.md) - system diagram, Octane compatibility
 - [Troubleshooting](docs/troubleshooting.md) - Langfuse v3 compatibility, common issues
+
+See the [Changelog](CHANGELOG.md) for release history.
 
 ## Contributing
 

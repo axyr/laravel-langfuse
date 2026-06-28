@@ -48,6 +48,51 @@ $prompt = Langfuse::prompt('test');
 $prompt->compile(['name' => 'World']); // "Hello World"
 ```
 
+## Faking read calls
+
+The fake also serves the read/query API ([Querying](querying.md)) without hitting
+the network. Seed it with the responses your code should receive, then assert on the
+reads and creates it performed.
+
+```php
+use Axyr\Langfuse\Dto\DatasetResponse;
+use Axyr\Langfuse\Dto\DatasetItemResponse;
+use Axyr\Langfuse\Dto\DatasetRunWithItemsResponse;
+use Axyr\Langfuse\Dto\ObservationResponse;
+use Axyr\Langfuse\Dto\ScoreResponse;
+
+$fake = Langfuse::fake();
+
+// Seed read responses
+$fake->withScore(ScoreResponse::fromArray([
+    'id' => 'score-abc', 'name' => 'accuracy', 'dataType' => 'NUMERIC', 'value' => 0.95,
+]));
+$fake->withObservation(ObservationResponse::fromArray(['id' => 'obs-1', 'type' => 'GENERATION']));
+$fake->withMetrics([['name' => 'chat', 'count_count' => 42]]); // rows returned by queryMetrics()
+$fake->withDataset(DatasetResponse::fromArray(['id' => 'ds-1', 'name' => 'qa-eval']));
+$fake->withDatasetItem(DatasetItemResponse::fromArray(['id' => 'di-1', 'datasetName' => 'qa-eval']));
+$fake->withDatasetRun(DatasetRunWithItemsResponse::fromArray([
+    'run' => ['id' => 'run-1', 'name' => 'run-2026-01', 'datasetName' => 'qa-eval'],
+    'datasetRunItems' => [],
+]));
+
+// Reads now return the seeded data
+expect(Langfuse::getScore('score-abc')?->value)->toBe(0.95);
+
+// Assert on creates performed against the fake
+$fake->assertDatasetCreated('qa-eval')
+    ->assertDatasetItemCreated('qa-eval')
+    ->assertDatasetRunItemCreated('run-2026-01');
+```
+
+Seeders: `withScore()`, `withObservation()`, `withMetrics(array $rows)`,
+`withDataset()`, `withDatasetItem()`, `withDatasetRun()`.
+Read-side assertions: `assertDatasetCreated(?string $name)`,
+`assertDatasetItemCreated(?string $datasetName)`,
+`assertDatasetRunItemCreated(?string $runName)`.
+Each assertion (and `with*` seeder) returns `$this` for chaining. Unseeded reads
+return `null`, matching the resilient behaviour of the real clients.
+
 ## Disabling tracing in tests
 
 Set `LANGFUSE_ENABLED=false` in `.env.testing`. The SDK swaps in a no-op batcher - nothing queued, nothing sent, no code changes needed.

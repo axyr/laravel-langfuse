@@ -22,3 +22,5 @@ Thumbs.db
 
 phpstan.neon
 phpunit.xml
+docs/READ_API_CONVENTIONS.md
+.git-rewrite/

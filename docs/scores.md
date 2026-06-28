@@ -50,6 +50,11 @@ Langfuse::score(new ScoreBody(
 Langfuse::deleteScore('score-id');
 ```
 
+## Reading scores back
+
+This page covers *writing* scores. To fetch scores by id, list them with filters,
+or aggregate them, see [Querying (read API)](querying.md#scores).
+
 ---
 
 Previous: [Spans and Events](spans-and-events.md) | Next: [Prompt Management](prompt-management.md)
