@@ -5,6 +5,25 @@ All notable changes to `axyr/laravel-langfuse` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Environments** — new `environment` config (`LANGFUSE_TRACING_ENVIRONMENT`, matching the
+  official Langfuse SDKs) stamped on every ingestion event body that does not set one.
+  Langfuse environments are immutable after first ingestion, so they must be present at
+  event creation; this applies to both the sync and queued batchers via `IngestionBatch`.
+- **Prompt-to-generation linking** — prompts resolved through `PromptManager::get()` are
+  registered in a request-scoped `CurrentPromptRegistry`; the Laravel AI subscriber consumes
+  the registered prompt when recording a generation and sets `promptName`/`promptVersion`,
+  enabling per-prompt-version metrics in Langfuse. Fallback prompts are never linked, and
+  each resolved prompt links to exactly one generation.
+
+### Changed
+
+- `PromptManager` is now bound as `scoped` (was `singleton`) so it always sees the current
+  scope's `CurrentPromptRegistry` under Octane and queue workers.
+
 ## [0.2.0] - 2026-06-28
 
 ### Added

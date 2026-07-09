@@ -42,6 +42,7 @@ class QueuedEventBatcher implements EventBatcherInterface
             $batch = new IngestionBatch(
                 batch: $events,
                 metadata: $this->config->batchMetadata(count($events)),
+                environment: $this->config->environment,
             );
 
             SendIngestionBatchJob::dispatch($batch->toArray())

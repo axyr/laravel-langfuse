@@ -43,6 +43,7 @@ class EventBatcher implements EventBatcherInterface
             $this->apiClient->send(new IngestionBatch(
                 batch: $events,
                 metadata: $this->config->batchMetadata(count($events)),
+                environment: $this->config->environment,
             ));
         } catch (\Throwable $throwable) {
             Log::warning('Langfuse flush error', ['message' => $throwable->getMessage()]);

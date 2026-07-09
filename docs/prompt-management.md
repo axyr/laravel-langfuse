@@ -68,6 +68,24 @@ $prompt = Langfuse::createPrompt(new CreatePromptBody(
 ));
 ```
 
+## Linking prompts to generations
+
+When a prompt is resolved through the prompt manager, it is registered in a request-scoped `CurrentPromptRegistry`. The Laravel AI auto-instrumentation consumes it when the next generation is recorded, setting `promptName` and `promptVersion` on the generation. In the Langfuse UI this links the generation to the exact prompt version that produced it, enabling per-version metrics (cost, latency, evaluation scores).
+
+This is automatic: resolve the prompt via `Langfuse::getPrompt()` (or `PromptManager::get()`), run your agent, and the generation is linked. Each resolved prompt links to exactly one generation — fallback prompts are never linked, since they do not exist as versions in Langfuse.
+
+For manual tracing, set the fields on the `GenerationBody` yourself:
+
+```php
+$prompt = Langfuse::getPrompt('movie-critic', label: 'production');
+
+$trace->generation(new GenerationBody(
+    name: 'gpt-4o',
+    promptName: $prompt->getName(),
+    promptVersion: $prompt->getVersion(),
+));
+```
+
 ## Listing prompts
 
 ```php

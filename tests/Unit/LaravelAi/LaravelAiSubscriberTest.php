@@ -10,6 +10,7 @@ use Axyr\Langfuse\Dto\IngestionEvent;
 use Axyr\Langfuse\LangfuseClient;
 use Axyr\Langfuse\LaravelAi\LaravelAiSubscriber;
 use Axyr\Langfuse\Objects\NullLangfuseTrace;
+use Axyr\Langfuse\Prompt\CurrentPromptRegistry;
 use Axyr\Langfuse\Prompt\PromptManager;
 use Axyr\Langfuse\Testing\RecordingEventBatcher;
 use Laravel\Ai\Contracts\Agent;
@@ -97,7 +98,7 @@ function makeTestTool(): Tool
 
 it('registers correct event mappings in subscribe', function () {
     [$client] = makeLangfuseClient();
-    $subscriber = new LaravelAiSubscriber($client);
+    $subscriber = new LaravelAiSubscriber($client, new CurrentPromptRegistry());
 
     $dispatcher = Mockery::mock(\Illuminate\Events\Dispatcher::class);
 
@@ -115,7 +116,7 @@ it('registers correct event mappings in subscribe', function () {
 
 it('creates trace and generation on agent prompt', function () {
     [$client, $batcher] = makeLangfuseClient();
-    $subscriber = new LaravelAiSubscriber($client);
+    $subscriber = new LaravelAiSubscriber($client, new CurrentPromptRegistry());
 
     $prompt = makeAgentPrompt();
 
@@ -140,7 +141,7 @@ it('creates trace and generation on agent prompt', function () {
 
 it('captures usage data in generation', function () {
     [$client, $batcher] = makeLangfuseClient();
-    $subscriber = new LaravelAiSubscriber($client);
+    $subscriber = new LaravelAiSubscriber($client, new CurrentPromptRegistry());
 
     $prompt = makeAgentPrompt();
 
@@ -168,7 +169,7 @@ it('captures usage data in generation', function () {
 
 it('captures model name from response meta', function () {
     [$client, $batcher] = makeLangfuseClient();
-    $subscriber = new LaravelAiSubscriber($client);
+    $subscriber = new LaravelAiSubscriber($client, new CurrentPromptRegistry());
 
     $prompt = makeAgentPrompt('gpt-4');
 
@@ -193,7 +194,7 @@ it('captures model name from response meta', function () {
 
 it('creates trace with agent class name', function () {
     [$client, $batcher] = makeLangfuseClient();
-    $subscriber = new LaravelAiSubscriber($client);
+    $subscriber = new LaravelAiSubscriber($client, new CurrentPromptRegistry());
 
     $prompt = makeAgentPrompt();
 
@@ -213,7 +214,7 @@ it('creates trace with agent class name', function () {
 
 it('creates trace with correct metadata', function () {
     [$client, $batcher] = makeLangfuseClient();
-    $subscriber = new LaravelAiSubscriber($client);
+    $subscriber = new LaravelAiSubscriber($client, new CurrentPromptRegistry());
 
     $prompt = makeAgentPrompt('claude-3-opus');
 
@@ -233,7 +234,7 @@ it('creates trace with correct metadata', function () {
 
 it('creates span for tool invocation', function () {
     [$client, $batcher] = makeLangfuseClient();
-    $subscriber = new LaravelAiSubscriber($client);
+    $subscriber = new LaravelAiSubscriber($client, new CurrentPromptRegistry());
 
     // First create a trace via agent prompt
     $prompt = makeAgentPrompt();
@@ -282,7 +283,7 @@ it('creates span for tool invocation', function () {
 
 it('reuses existing trace across multiple prompts', function () {
     [$client, $batcher] = makeLangfuseClient();
-    $subscriber = new LaravelAiSubscriber($client);
+    $subscriber = new LaravelAiSubscriber($client, new CurrentPromptRegistry());
 
     $prompt = makeAgentPrompt();
 
@@ -322,7 +323,7 @@ it('reuses existing trace across multiple prompts', function () {
 
 it('sets current trace on langfuse client', function () {
     [$client, $batcher] = makeLangfuseClient();
-    $subscriber = new LaravelAiSubscriber($client);
+    $subscriber = new LaravelAiSubscriber($client, new CurrentPromptRegistry());
 
     $prompt = makeAgentPrompt();
 
@@ -336,7 +337,7 @@ it('sets current trace on langfuse client', function () {
 
 it('handles streaming events same as non-streaming', function () {
     [$client, $batcher] = makeLangfuseClient();
-    $subscriber = new LaravelAiSubscriber($client);
+    $subscriber = new LaravelAiSubscriber($client, new CurrentPromptRegistry());
 
     $prompt = makeAgentPrompt();
 
@@ -370,7 +371,7 @@ it('handles streaming events same as non-streaming', function () {
 
 it('handles tool invoked without prior invoking tool gracefully', function () {
     [$client, $batcher] = makeLangfuseClient();
-    $subscriber = new LaravelAiSubscriber($client);
+    $subscriber = new LaravelAiSubscriber($client, new CurrentPromptRegistry());
 
     $subscriber->handleToolInvoked(new ToolInvoked(
         invocationId: 'inv-1',
@@ -391,7 +392,7 @@ it('handles tool invoked without prior invoking tool gracefully', function () {
 
 it('falls back to prompt model when response meta model is null', function () {
     [$client, $batcher] = makeLangfuseClient();
-    $subscriber = new LaravelAiSubscriber($client);
+    $subscriber = new LaravelAiSubscriber($client, new CurrentPromptRegistry());
 
     $prompt = makeAgentPrompt('claude-3-sonnet');
 
@@ -416,7 +417,7 @@ it('falls back to prompt model when response meta model is null', function () {
 
 it('captures prompt text as generation input', function () {
     [$client, $batcher] = makeLangfuseClient();
-    $subscriber = new LaravelAiSubscriber($client);
+    $subscriber = new LaravelAiSubscriber($client, new CurrentPromptRegistry());
 
     $prompt = makeAgentPrompt();
 
@@ -441,7 +442,7 @@ it('captures prompt text as generation input', function () {
 
 it('captures response text as generation output', function () {
     [$client, $batcher] = makeLangfuseClient();
-    $subscriber = new LaravelAiSubscriber($client);
+    $subscriber = new LaravelAiSubscriber($client, new CurrentPromptRegistry());
 
     $prompt = makeAgentPrompt();
 
@@ -462,4 +463,42 @@ it('captures response text as generation output', function () {
     $body = $updateEvent->body->toArray();
 
     expect($body['output'])->toBe('Why did the chicken cross the road?');
+});
+
+it('links the registered managed prompt to the generation and consumes it', function () {
+    [$client, $batcher] = makeLangfuseClient();
+    $registry = new CurrentPromptRegistry();
+    $subscriber = new LaravelAiSubscriber($client, $registry);
+
+    $registry->set(new \Axyr\Langfuse\Dto\TextPrompt(name: 'movie-critic', version: 7, prompt: 'text'));
+
+    $prompt = makeAgentPrompt();
+    $subscriber->handlePromptingAgent(new PromptingAgent(invocationId: 'inv-1', prompt: $prompt));
+    $subscriber->handleAgentPrompted(new AgentPrompted(
+        invocationId: 'inv-1',
+        prompt: $prompt,
+        response: makeAgentResponse(),
+    ));
+
+    $generationCreate = collect($batcher->events())
+        ->first(fn(IngestionEvent $event): bool => $event->type->value === 'generation-create');
+
+    expect($generationCreate)->not->toBeNull()
+        ->and($generationCreate->toArray()['body']['promptName'])->toBe('movie-critic')
+        ->and($generationCreate->toArray()['body']['promptVersion'])->toBe(7)
+        ->and($registry->current())->toBeNull();
+
+    // A second generation without a newly resolved prompt is not linked.
+    $subscriber->handlePromptingAgent(new PromptingAgent(invocationId: 'inv-2', prompt: $prompt));
+    $subscriber->handleAgentPrompted(new AgentPrompted(
+        invocationId: 'inv-2',
+        prompt: $prompt,
+        response: makeAgentResponse(invocationId: 'inv-2'),
+    ));
+
+    $second = collect($batcher->events())
+        ->filter(fn(IngestionEvent $event): bool => $event->type->value === 'generation-create')
+        ->last();
+
+    expect($second->toArray()['body'])->not->toHaveKey('promptName');
 });

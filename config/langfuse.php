@@ -14,4 +14,5 @@ return [
     'laravel_ai_enabled' => env('LANGFUSE_LARAVEL_AI_ENABLED', false),
     'neuron_ai_enabled' => env('LANGFUSE_NEURON_AI_ENABLED', false),
     'queue' => env('LANGFUSE_QUEUE', null),
+    'environment' => env('LANGFUSE_TRACING_ENVIRONMENT', null),
 ];

@@ -18,6 +18,7 @@ readonly class LangfuseConfig
         public bool $laravelAiEnabled = false,
         public bool $neuronAiEnabled = false,
         public ?string $queue = null,
+        public ?string $environment = null,
     ) {}
 
     /**
@@ -37,6 +38,7 @@ readonly class LangfuseConfig
             laravelAiEnabled: self::parseBool($config['laravel_ai_enabled'] ?? false),
             neuronAiEnabled: self::parseBool($config['neuron_ai_enabled'] ?? false),
             queue: self::parseNullableString($config['queue'] ?? null),
+            environment: self::parseNullableString($config['environment'] ?? null),
         );
     }
 

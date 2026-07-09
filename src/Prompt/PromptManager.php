@@ -16,6 +16,7 @@ class PromptManager
         private readonly PromptApiClientInterface $apiClient,
         private readonly PromptCacheInterface $cache,
         private readonly int $cacheTtl = 60,
+        private readonly ?CurrentPromptRegistry $registry = null,
     ) {}
 
     /**
@@ -29,17 +30,13 @@ class PromptManager
     ): PromptInterface {
         $cacheKey = $this->buildCacheKey($name, $version, $label);
 
-        $cached = $this->getFromCache($cacheKey);
-        if ($cached !== null) {
-            return $cached;
-        }
+        $prompt = $this->getFromCache($cacheKey)
+            ?? $this->fetchAndCache($cacheKey, $name, $version, $label)
+            ?? $this->resolveStaleOrFallback($cacheKey, $name, $fallback);
 
-        $fetched = $this->fetchAndCache($cacheKey, $name, $version, $label);
-        if ($fetched !== null) {
-            return $fetched;
-        }
+        $this->registry?->set($prompt);
 
-        return $this->resolveStaleOrFallback($cacheKey, $name, $fallback);
+        return $prompt;
     }
 
     private function getFromCache(string $cacheKey): ?PromptInterface

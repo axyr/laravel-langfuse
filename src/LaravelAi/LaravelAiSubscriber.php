@@ -12,6 +12,7 @@ use Axyr\Langfuse\Dto\Usage;
 use Axyr\Langfuse\Objects\LangfuseSpan;
 use Axyr\Langfuse\Objects\LangfuseTrace;
 use Axyr\Langfuse\Objects\NullLangfuseTrace;
+use Axyr\Langfuse\Prompt\CurrentPromptRegistry;
 use DateTimeImmutable;
 use DateTimeZone;
 use Laravel\Ai\Events\AgentPrompted;
@@ -37,6 +38,7 @@ class LaravelAiSubscriber
 
     public function __construct(
         private readonly LangfuseClientInterface $langfuse,
+        private readonly CurrentPromptRegistry $prompts,
     ) {}
 
     public function handlePromptingAgent(PromptingAgent $event): void
@@ -53,14 +55,7 @@ class LaravelAiSubscriber
         $trace = $this->getOrCreateTrace($event);
         $response = $event->response;
 
-        $model = $response->meta->model ?? $event->prompt->model;
-
-        $generation = $trace->generation(new GenerationBody(
-            name: $model,
-            model: $model,
-            input: $event->prompt->prompt,
-            startTime: $this->formatTime($startTime),
-        ));
+        $generation = $trace->generation($this->buildGenerationBody($event, $startTime));
 
         $generation->end(
             endTime: $this->formatTime($endTime),
@@ -69,6 +64,21 @@ class LaravelAiSubscriber
         );
 
         unset($this->startTimes[$event->invocationId]);
+    }
+
+    private function buildGenerationBody(AgentPrompted|AgentStreamed $event, float $startTime): GenerationBody
+    {
+        $model = $event->response->meta->model ?? $event->prompt->model;
+        $managedPrompt = $this->prompts->consume();
+
+        return new GenerationBody(
+            name: $model,
+            startTime: $this->formatTime($startTime),
+            input: $event->prompt->prompt,
+            model: $model,
+            promptName: $managedPrompt?->getName(),
+            promptVersion: $managedPrompt?->getVersion(),
+        );
     }
 
     public function handleInvokingTool(InvokingTool $event): void

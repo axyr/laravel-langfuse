@@ -54,3 +54,42 @@ it('serializes empty metadata as empty object', function () {
     expect($array['metadata'])->toBeObject()
         ->and($array['batch'])->toBe([]);
 });
+
+it('stamps the default environment on event bodies that lack one', function () {
+    $event = new IngestionEvent(
+        id: 'evt-1',
+        type: EventType::TraceCreate,
+        timestamp: '2024-01-01T00:00:00Z',
+        body: new TraceBody(id: 'trace-1'),
+    );
+
+    $batch = new IngestionBatch(batch: [$event], environment: 'production');
+
+    expect($batch->toArray()['batch'][0]['body']['environment'])->toBe('production');
+});
+
+it('preserves an explicit environment on the event body', function () {
+    $event = new IngestionEvent(
+        id: 'evt-1',
+        type: EventType::TraceCreate,
+        timestamp: '2024-01-01T00:00:00Z',
+        body: new TraceBody(id: 'trace-1', environment: 'staging'),
+    );
+
+    $batch = new IngestionBatch(batch: [$event], environment: 'production');
+
+    expect($batch->toArray()['batch'][0]['body']['environment'])->toBe('staging');
+});
+
+it('leaves event bodies untouched when no environment is configured', function () {
+    $event = new IngestionEvent(
+        id: 'evt-1',
+        type: EventType::TraceCreate,
+        timestamp: '2024-01-01T00:00:00Z',
+        body: new TraceBody(id: 'trace-1'),
+    );
+
+    $batch = new IngestionBatch(batch: [$event]);
+
+    expect($batch->toArray()['batch'][0]['body'])->not->toHaveKey('environment');
+});

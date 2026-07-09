@@ -252,3 +252,14 @@ it('should not enable prism when both are disabled', function () {
 
     expect($config->shouldEnablePrism())->toBeFalse();
 });
+
+it('parses the environment from config', function () {
+    $config = LangfuseConfig::fromArray(['environment' => 'production']);
+
+    expect($config->environment)->toBe('production');
+});
+
+it('defaults the environment to null', function () {
+    expect(LangfuseConfig::fromArray([])->environment)->toBeNull()
+        ->and(LangfuseConfig::fromArray(['environment' => ''])->environment)->toBeNull();
+});
