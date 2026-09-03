@@ -19,6 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Controlled independently via two new config values (both default `true`):
   `LANGFUSE_LARAVEL_AI_SESSION_TRACING` and `LANGFUSE_LARAVEL_AI_USER_TRACING`.
 
+### Fixed
+
+- **Laravel AI auto-instrumented traces had no `output`**: `LaravelAiSubscriber` set the
+  final response text on the generation but never on the trace itself, so the trace's own
+  Output field was left empty in the Langfuse UI. `handleAgentPrompted()` now also calls
+  `$trace->update(new TraceBody(output: $response->text))` after ending the generation.
+
 ## [0.2.0] - 2026-06-28
 
 ### Added

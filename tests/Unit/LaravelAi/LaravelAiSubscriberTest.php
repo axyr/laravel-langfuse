@@ -312,12 +312,41 @@ it('creates trace and generation on agent prompt', function () {
         response: makeAgentResponse(),
     ));
 
-    expect($batcher->events())->toHaveCount(3); // trace-create, generation-create, generation-update
+    expect($batcher->events())->toHaveCount(4); // trace-create, generation-create, generation-update, trace-create (output update)
 
     $types = array_map(fn(IngestionEvent $e) => $e->type->value, $batcher->events());
     expect($types)->toContain('trace-create')
         ->and($types)->toContain('generation-create')
         ->and($types)->toContain('generation-update');
+});
+
+it('sets the trace output to the agent response text', function () {
+    [$client, $batcher] = makeLangfuseClient();
+    $subscriber = makeSubscriber($client);
+
+    $prompt = makeAgentPrompt();
+
+    $subscriber->handlePromptingAgent(new PromptingAgent(
+        invocationId: 'inv-1',
+        prompt: $prompt,
+    ));
+
+    $subscriber->handleAgentPrompted(new AgentPrompted(
+        invocationId: 'inv-1',
+        prompt: $prompt,
+        response: makeAgentResponse(text: 'Final answer'),
+    ));
+
+    $traceEvents = collect($batcher->events())->filter(
+        fn(IngestionEvent $e) => $e->type->value === 'trace-create',
+    );
+    $traceId = $traceEvents->first()->body->toArray()['id'];
+    $updateEvent = $traceEvents->last();
+    $body = $updateEvent->body->toArray();
+
+    expect($traceEvents)->toHaveCount(2)
+        ->and($body['id'])->toBe($traceId)
+        ->and($body['output'])->toBe('Final answer');
 });
 
 it('captures usage data in generation', function () {
@@ -491,8 +520,8 @@ it('reuses existing trace across multiple prompts', function () {
         fn(IngestionEvent $e) => $e->type->value === 'generation-create',
     );
 
-    // Only 1 trace created, but 2 generations
-    expect($traceEvents)->toHaveCount(1)
+    // 1 trace created plus 2 output updates (also sent as trace-create events), but 2 generations
+    expect($traceEvents)->toHaveCount(3)
         ->and($generationEvents)->toHaveCount(2);
 
     // Both generations reference the same trace
@@ -538,7 +567,7 @@ it('handles streaming events same as non-streaming', function () {
         ),
     ));
 
-    expect($batcher->events())->toHaveCount(3);
+    expect($batcher->events())->toHaveCount(4);
 
     $updateEvent = collect($batcher->events())->first(
         fn(IngestionEvent $e) => $e->type->value === 'generation-update',

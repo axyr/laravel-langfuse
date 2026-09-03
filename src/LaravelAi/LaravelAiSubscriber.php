@@ -74,6 +74,8 @@ class LaravelAiSubscriber
             usage: $this->mapUsage($response->usage),
         );
 
+        $trace->update(new TraceBody(output: $response->text));
+
         unset($this->startTimes[$event->invocationId]);
     }
 
