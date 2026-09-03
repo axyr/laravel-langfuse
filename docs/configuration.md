@@ -16,6 +16,8 @@ All configuration lives in `config/langfuse.php`. Override anything via environm
 | `LANGFUSE_QUEUE` | `null` | Queue name for async batching (e.g. `langfuse`) |
 | `LANGFUSE_PRISM_ENABLED` | `false` | Auto-trace Prism LLM calls |
 | `LANGFUSE_LARAVEL_AI_ENABLED` | `false` | Auto-trace Laravel AI SDK calls (also enables Prism tracing) |
+| `LANGFUSE_LARAVEL_AI_SESSION_TRACING` | `true` | Set the trace `sessionId` from a Laravel AI agent's `RemembersConversations::currentConversation()` |
+| `LANGFUSE_LARAVEL_AI_USER_TRACING` | `true` | Set the trace `userId` from a Laravel AI agent's `RemembersConversations::conversationParticipant()` |
 | `LANGFUSE_NEURON_AI_ENABLED` | `false` | Auto-trace Neuron AI agents |
 
 ## Publishing the config file

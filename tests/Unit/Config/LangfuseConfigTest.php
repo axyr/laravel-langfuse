@@ -158,6 +158,30 @@ it('defaults prompt_cache_ttl and prism_enabled for missing array keys', functio
         ->and($config->prismEnabled)->toBeFalse();
 });
 
+it('defaults laravel ai session and user tracing to enabled', function () {
+    $config = new LangfuseConfig(publicKey: 'pk', secretKey: 'sk');
+
+    expect($config->laravelAiSessionTracingEnabled)->toBeTrue()
+        ->and($config->laravelAiUserTracingEnabled)->toBeTrue();
+});
+
+it('parses laravel_ai_session_tracing and laravel_ai_user_tracing from array', function () {
+    $config = LangfuseConfig::fromArray([
+        'laravel_ai_session_tracing' => false,
+        'laravel_ai_user_tracing' => false,
+    ]);
+
+    expect($config->laravelAiSessionTracingEnabled)->toBeFalse()
+        ->and($config->laravelAiUserTracingEnabled)->toBeFalse();
+});
+
+it('defaults laravel_ai_session_tracing and laravel_ai_user_tracing to enabled for missing array keys', function () {
+    $config = LangfuseConfig::fromArray([]);
+
+    expect($config->laravelAiSessionTracingEnabled)->toBeTrue()
+        ->and($config->laravelAiUserTracingEnabled)->toBeTrue();
+});
+
 it('generates correct scores url', function () {
     $config = new LangfuseConfig(publicKey: 'pk', secretKey: 'sk');
 

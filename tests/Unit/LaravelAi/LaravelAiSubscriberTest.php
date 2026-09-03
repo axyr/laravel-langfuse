@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Axyr\Langfuse\Cache\PromptCache;
 use Axyr\Langfuse\Config\LangfuseConfig;
+use Axyr\Langfuse\Contracts\LangfuseClientInterface;
 use Axyr\Langfuse\Contracts\PromptApiClientInterface;
 use Axyr\Langfuse\Contracts\ScoreApiClientInterface;
 use Axyr\Langfuse\Dto\IngestionEvent;
@@ -14,6 +15,7 @@ use Axyr\Langfuse\Prompt\PromptManager;
 use Axyr\Langfuse\Testing\RecordingEventBatcher;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\Providers\TextProvider;
+use Laravel\Ai\Contracts\RemembersConversations;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Events\AgentPrompted;
 use Laravel\Ai\Events\AgentStreamed;
@@ -95,9 +97,71 @@ function makeTestTool(): Tool
     return new class () implements Tool {};
 }
 
+function makeLangfuseConfig(
+    bool $laravelAiSessionTracingEnabled = true,
+    bool $laravelAiUserTracingEnabled = true,
+): LangfuseConfig {
+    return new LangfuseConfig(
+        publicKey: 'pk',
+        secretKey: 'sk',
+        laravelAiSessionTracingEnabled: $laravelAiSessionTracingEnabled,
+        laravelAiUserTracingEnabled: $laravelAiUserTracingEnabled,
+    );
+}
+
+function makeSubscriber(LangfuseClientInterface $client, ?LangfuseConfig $config = null): LaravelAiSubscriber
+{
+    return new LaravelAiSubscriber($client, $config ?? makeLangfuseConfig());
+}
+
+function makeConversationalAgent(?string $conversationId = null, ?object $participant = null): Agent&RemembersConversations
+{
+    return new class ($conversationId, $participant) implements Agent, RemembersConversations {
+        public function __construct(
+            private readonly ?string $conversationId,
+            private readonly ?object $participant,
+        ) {}
+
+        public function forUser(object $user): static
+        {
+            return $this;
+        }
+
+        public function continue(string $conversationId, object $as): static
+        {
+            return $this;
+        }
+
+        public function continueLastConversation(object $as): static
+        {
+            return $this;
+        }
+
+        public function currentConversation(): ?string
+        {
+            return $this->conversationId;
+        }
+
+        public function hasConversationParticipant(): bool
+        {
+            return $this->participant !== null;
+        }
+
+        public function conversationParticipant(): ?object
+        {
+            return $this->participant;
+        }
+
+        public function messages(): iterable
+        {
+            return [];
+        }
+    };
+}
+
 it('registers correct event mappings in subscribe', function () {
     [$client] = makeLangfuseClient();
-    $subscriber = new LaravelAiSubscriber($client);
+    $subscriber = makeSubscriber($client);
 
     $dispatcher = Mockery::mock(\Illuminate\Events\Dispatcher::class);
 
@@ -115,7 +179,7 @@ it('registers correct event mappings in subscribe', function () {
 
 it('creates trace and generation on agent prompt', function () {
     [$client, $batcher] = makeLangfuseClient();
-    $subscriber = new LaravelAiSubscriber($client);
+    $subscriber = makeSubscriber($client);
 
     $prompt = makeAgentPrompt();
 
@@ -140,7 +204,7 @@ it('creates trace and generation on agent prompt', function () {
 
 it('captures usage data in generation', function () {
     [$client, $batcher] = makeLangfuseClient();
-    $subscriber = new LaravelAiSubscriber($client);
+    $subscriber = makeSubscriber($client);
 
     $prompt = makeAgentPrompt();
 
@@ -168,7 +232,7 @@ it('captures usage data in generation', function () {
 
 it('captures model name from response meta', function () {
     [$client, $batcher] = makeLangfuseClient();
-    $subscriber = new LaravelAiSubscriber($client);
+    $subscriber = makeSubscriber($client);
 
     $prompt = makeAgentPrompt('gpt-4');
 
@@ -193,7 +257,7 @@ it('captures model name from response meta', function () {
 
 it('creates trace with agent class name', function () {
     [$client, $batcher] = makeLangfuseClient();
-    $subscriber = new LaravelAiSubscriber($client);
+    $subscriber = makeSubscriber($client);
 
     $prompt = makeAgentPrompt();
 
@@ -213,7 +277,7 @@ it('creates trace with agent class name', function () {
 
 it('creates trace with correct metadata', function () {
     [$client, $batcher] = makeLangfuseClient();
-    $subscriber = new LaravelAiSubscriber($client);
+    $subscriber = makeSubscriber($client);
 
     $prompt = makeAgentPrompt('claude-3-opus');
 
@@ -233,7 +297,7 @@ it('creates trace with correct metadata', function () {
 
 it('creates span for tool invocation', function () {
     [$client, $batcher] = makeLangfuseClient();
-    $subscriber = new LaravelAiSubscriber($client);
+    $subscriber = makeSubscriber($client);
 
     // First create a trace via agent prompt
     $prompt = makeAgentPrompt();
@@ -282,7 +346,7 @@ it('creates span for tool invocation', function () {
 
 it('reuses existing trace across multiple prompts', function () {
     [$client, $batcher] = makeLangfuseClient();
-    $subscriber = new LaravelAiSubscriber($client);
+    $subscriber = makeSubscriber($client);
 
     $prompt = makeAgentPrompt();
 
@@ -322,7 +386,7 @@ it('reuses existing trace across multiple prompts', function () {
 
 it('sets current trace on langfuse client', function () {
     [$client, $batcher] = makeLangfuseClient();
-    $subscriber = new LaravelAiSubscriber($client);
+    $subscriber = makeSubscriber($client);
 
     $prompt = makeAgentPrompt();
 
@@ -336,7 +400,7 @@ it('sets current trace on langfuse client', function () {
 
 it('handles streaming events same as non-streaming', function () {
     [$client, $batcher] = makeLangfuseClient();
-    $subscriber = new LaravelAiSubscriber($client);
+    $subscriber = makeSubscriber($client);
 
     $prompt = makeAgentPrompt();
 
@@ -370,7 +434,7 @@ it('handles streaming events same as non-streaming', function () {
 
 it('handles tool invoked without prior invoking tool gracefully', function () {
     [$client, $batcher] = makeLangfuseClient();
-    $subscriber = new LaravelAiSubscriber($client);
+    $subscriber = makeSubscriber($client);
 
     $subscriber->handleToolInvoked(new ToolInvoked(
         invocationId: 'inv-1',
@@ -391,7 +455,7 @@ it('handles tool invoked without prior invoking tool gracefully', function () {
 
 it('falls back to prompt model when response meta model is null', function () {
     [$client, $batcher] = makeLangfuseClient();
-    $subscriber = new LaravelAiSubscriber($client);
+    $subscriber = makeSubscriber($client);
 
     $prompt = makeAgentPrompt('claude-3-sonnet');
 
@@ -416,7 +480,7 @@ it('falls back to prompt model when response meta model is null', function () {
 
 it('captures prompt text as generation input', function () {
     [$client, $batcher] = makeLangfuseClient();
-    $subscriber = new LaravelAiSubscriber($client);
+    $subscriber = makeSubscriber($client);
 
     $prompt = makeAgentPrompt();
 
@@ -441,7 +505,7 @@ it('captures prompt text as generation input', function () {
 
 it('captures response text as generation output', function () {
     [$client, $batcher] = makeLangfuseClient();
-    $subscriber = new LaravelAiSubscriber($client);
+    $subscriber = makeSubscriber($client);
 
     $prompt = makeAgentPrompt();
 
@@ -462,4 +526,144 @@ it('captures response text as generation output', function () {
     $body = $updateEvent->body->toArray();
 
     expect($body['output'])->toBe('Why did the chicken cross the road?');
+});
+
+it('sets trace sessionId and userId from an agent that remembers conversations', function () {
+    [$client, $batcher] = makeLangfuseClient();
+    $subscriber = makeSubscriber($client);
+
+    $agent = makeConversationalAgent(
+        conversationId: 'conversation-42',
+        participant: (object) ['id' => 'user-42'],
+    );
+    $prompt = makeAgentPrompt(agent: $agent);
+
+    $subscriber->handlePromptingAgent(new PromptingAgent(
+        invocationId: 'inv-1',
+        prompt: $prompt,
+    ));
+
+    $traceEvent = collect($batcher->events())->first(
+        fn(IngestionEvent $e) => $e->type->value === 'trace-create',
+    );
+    $body = $traceEvent->body->toArray();
+
+    expect($body['sessionId'])->toBe('conversation-42')
+        ->and($body['userId'])->toBe('user-42');
+});
+
+it('leaves trace sessionId and userId unset for an agent that does not remember conversations', function () {
+    [$client, $batcher] = makeLangfuseClient();
+    $subscriber = makeSubscriber($client);
+
+    $prompt = makeAgentPrompt(agent: makeTestAgent());
+
+    $subscriber->handlePromptingAgent(new PromptingAgent(
+        invocationId: 'inv-1',
+        prompt: $prompt,
+    ));
+
+    $traceEvent = collect($batcher->events())->first(
+        fn(IngestionEvent $e) => $e->type->value === 'trace-create',
+    );
+    $body = $traceEvent->body->toArray();
+
+    expect($body)->not->toHaveKey('sessionId')
+        ->and($body)->not->toHaveKey('userId');
+});
+
+it('leaves trace userId unset when the agent has no conversation participant', function () {
+    [$client, $batcher] = makeLangfuseClient();
+    $subscriber = makeSubscriber($client);
+
+    $agent = makeConversationalAgent(conversationId: 'conversation-42', participant: null);
+    $prompt = makeAgentPrompt(agent: $agent);
+
+    $subscriber->handlePromptingAgent(new PromptingAgent(
+        invocationId: 'inv-1',
+        prompt: $prompt,
+    ));
+
+    $traceEvent = collect($batcher->events())->first(
+        fn(IngestionEvent $e) => $e->type->value === 'trace-create',
+    );
+    $body = $traceEvent->body->toArray();
+
+    expect($body['sessionId'])->toBe('conversation-42')
+        ->and($body)->not->toHaveKey('userId');
+});
+
+it('does not set sessionId when laravel ai session tracing is disabled', function () {
+    [$client, $batcher] = makeLangfuseClient();
+    $subscriber = makeSubscriber($client, makeLangfuseConfig(laravelAiSessionTracingEnabled: false));
+
+    $agent = makeConversationalAgent(
+        conversationId: 'conversation-42',
+        participant: (object) ['id' => 'user-42'],
+    );
+    $prompt = makeAgentPrompt(agent: $agent);
+
+    $subscriber->handlePromptingAgent(new PromptingAgent(
+        invocationId: 'inv-1',
+        prompt: $prompt,
+    ));
+
+    $traceEvent = collect($batcher->events())->first(
+        fn(IngestionEvent $e) => $e->type->value === 'trace-create',
+    );
+    $body = $traceEvent->body->toArray();
+
+    expect($body)->not->toHaveKey('sessionId')
+        ->and($body['userId'])->toBe('user-42');
+});
+
+it('does not set userId when laravel ai user tracing is disabled', function () {
+    [$client, $batcher] = makeLangfuseClient();
+    $subscriber = makeSubscriber($client, makeLangfuseConfig(laravelAiUserTracingEnabled: false));
+
+    $agent = makeConversationalAgent(
+        conversationId: 'conversation-42',
+        participant: (object) ['id' => 'user-42'],
+    );
+    $prompt = makeAgentPrompt(agent: $agent);
+
+    $subscriber->handlePromptingAgent(new PromptingAgent(
+        invocationId: 'inv-1',
+        prompt: $prompt,
+    ));
+
+    $traceEvent = collect($batcher->events())->first(
+        fn(IngestionEvent $e) => $e->type->value === 'trace-create',
+    );
+    $body = $traceEvent->body->toArray();
+
+    expect($body['sessionId'])->toBe('conversation-42')
+        ->and($body)->not->toHaveKey('userId');
+});
+
+it('sets sessionId and userId on the tool span trace as well', function () {
+    [$client, $batcher] = makeLangfuseClient();
+    $subscriber = makeSubscriber($client);
+
+    $agent = makeConversationalAgent(
+        conversationId: 'conversation-42',
+        participant: (object) ['id' => 'user-42'],
+    );
+    $tool = makeTestTool();
+
+    $subscriber->handleInvokingTool(new InvokingTool(
+        invocationId: 'inv-1',
+        toolInvocationId: 'tool-inv-1',
+        agent: $agent,
+        tool: $tool,
+        arguments: [],
+    ));
+
+    $traceEvent = collect($batcher->events())->first(
+        fn(IngestionEvent $e) => $e->type->value === 'trace-create',
+    );
+    $body = $traceEvent->body->toArray();
+
+    expect($body['sessionId'])->toBe('conversation-42')
+        ->and($body['userId'])->toBe('user-42');
 });

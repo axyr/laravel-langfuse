@@ -25,6 +25,32 @@ The SDK listens to Laravel AI's event system:
 
 Multiple agent calls within the same request share a single trace. If you use `LangfuseMiddleware`, agent generations nest under the request trace automatically.
 
+## Session and user tracking
+
+If your agent implements Laravel AI's `RemembersConversations` contract, its traces are automatically tagged with `sessionId` (from `currentConversation()`) and `userId` (from `conversationParticipant()->id`), so the Langfuse Sessions and Users views can group and filter them:
+
+```php
+use Laravel\Ai\Contracts\RemembersConversations;
+use Laravel\Ai\Concerns\RemembersConversations as RemembersConversationsConcern;
+
+class SupportAgent implements Agent, RemembersConversations
+{
+    use RemembersConversationsConcern;
+
+    // ...
+}
+
+$agent = (new SupportAgent)->continueLastConversation((object) ['id' => $userId]);
+$agent->prompt('...');
+```
+
+This is on by default. Turn either one off independently if you don't want that identifier forwarded to Langfuse:
+
+```env
+LANGFUSE_LARAVEL_AI_SESSION_TRACING=false
+LANGFUSE_LARAVEL_AI_USER_TRACING=false
+```
+
 ## Combining with manual tracing
 
 Set a custom trace before the agent call. Laravel AI generations will nest under it:

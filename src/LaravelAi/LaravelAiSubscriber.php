@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Axyr\Langfuse\LaravelAi;
 
+use Axyr\Langfuse\Config\LangfuseConfig;
 use Axyr\Langfuse\Contracts\LangfuseClientInterface;
 use Axyr\Langfuse\Dto\GenerationBody;
 use Axyr\Langfuse\Dto\SpanBody;
@@ -14,6 +15,7 @@ use Axyr\Langfuse\Objects\LangfuseTrace;
 use Axyr\Langfuse\Objects\NullLangfuseTrace;
 use DateTimeImmutable;
 use DateTimeZone;
+use Laravel\Ai\Contracts\RemembersConversations;
 use Laravel\Ai\Events\AgentPrompted;
 use Laravel\Ai\Events\AgentStreamed;
 use Laravel\Ai\Events\InvokingTool;
@@ -37,6 +39,7 @@ class LaravelAiSubscriber
 
     public function __construct(
         private readonly LangfuseClientInterface $langfuse,
+        private readonly LangfuseConfig $config,
     ) {}
 
     public function handlePromptingAgent(PromptingAgent $event): void
@@ -120,9 +123,13 @@ class LaravelAiSubscriber
 
     private function getOrCreateTrace(PromptingAgent|AgentPrompted $event): LangfuseTrace
     {
+        $agent = $event->prompt->agent;
+
         return $this->resolveTrace($event->invocationId, new TraceBody(
-            name: 'laravel-ai-' . $this->getShortClassName($event->prompt->agent),
+            name: 'laravel-ai-' . $this->getShortClassName($agent),
             input: $event->prompt->prompt,
+            sessionId: $this->resolveSessionId($agent),
+            userId: $this->resolveUserId($agent),
             metadata: [
                 'model' => $event->prompt->model,
                 'source' => 'laravel-ai-auto-instrumentation',
@@ -132,12 +139,46 @@ class LaravelAiSubscriber
 
     private function getOrCreateTraceFromTool(InvokingTool $event): LangfuseTrace
     {
+        $agent = $event->agent;
+
         return $this->resolveTrace($event->invocationId, new TraceBody(
-            name: 'laravel-ai-' . $this->getShortClassName($event->agent),
+            name: 'laravel-ai-' . $this->getShortClassName($agent),
+            sessionId: $this->resolveSessionId($agent),
+            userId: $this->resolveUserId($agent),
             metadata: [
                 'source' => 'laravel-ai-auto-instrumentation',
             ],
         ));
+    }
+
+    private function resolveSessionId(object $agent): ?string
+    {
+        if (! $this->config->laravelAiSessionTracingEnabled || ! $agent instanceof RemembersConversations) {
+            return null;
+        }
+
+        return $agent->currentConversation();
+    }
+
+    private function resolveUserId(object $agent): ?string
+    {
+        if (! $this->config->laravelAiUserTracingEnabled || ! $agent instanceof RemembersConversations) {
+            return null;
+        }
+
+        $participant = $agent->conversationParticipant();
+
+        if ($participant === null) {
+            return null;
+        }
+
+        $id = get_object_vars($participant)['id'] ?? null;
+
+        return match (true) {
+            is_string($id) => $id,
+            is_int($id) => (string) $id,
+            default => null,
+        };
     }
 
     private function resolveTrace(string $invocationId, TraceBody $body): LangfuseTrace

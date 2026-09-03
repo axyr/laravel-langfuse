@@ -16,6 +16,8 @@ readonly class LangfuseConfig
         public int $promptCacheTtl = 60,
         public bool $prismEnabled = false,
         public bool $laravelAiEnabled = false,
+        public bool $laravelAiSessionTracingEnabled = true,
+        public bool $laravelAiUserTracingEnabled = true,
         public bool $neuronAiEnabled = false,
         public ?string $queue = null,
     ) {}
@@ -35,6 +37,8 @@ readonly class LangfuseConfig
             promptCacheTtl: self::parseInt($config['prompt_cache_ttl'] ?? null, 60),
             prismEnabled: self::parseBool($config['prism_enabled'] ?? false),
             laravelAiEnabled: self::parseBool($config['laravel_ai_enabled'] ?? false),
+            laravelAiSessionTracingEnabled: self::parseBool($config['laravel_ai_session_tracing'] ?? true),
+            laravelAiUserTracingEnabled: self::parseBool($config['laravel_ai_user_tracing'] ?? true),
             neuronAiEnabled: self::parseBool($config['neuron_ai_enabled'] ?? false),
             queue: self::parseNullableString($config['queue'] ?? null),
         );
