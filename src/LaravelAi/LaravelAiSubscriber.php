@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Axyr\Langfuse\LaravelAi;
 
 use Axyr\Langfuse\Config\LangfuseConfig;
+use Axyr\Langfuse\Contracts\HasSessionIdInterface;
 use Axyr\Langfuse\Contracts\LangfuseClientInterface;
 use Axyr\Langfuse\Dto\GenerationBody;
 use Axyr\Langfuse\Dto\SpanBody;
@@ -15,6 +16,7 @@ use Axyr\Langfuse\Objects\LangfuseTrace;
 use Axyr\Langfuse\Objects\NullLangfuseTrace;
 use DateTimeImmutable;
 use DateTimeZone;
+use Illuminate\Contracts\Auth\Factory as AuthFactory;
 use Laravel\Ai\Contracts\RemembersConversations;
 use Laravel\Ai\Events\AgentPrompted;
 use Laravel\Ai\Events\AgentStreamed;
@@ -40,6 +42,7 @@ class LaravelAiSubscriber
     public function __construct(
         private readonly LangfuseClientInterface $langfuse,
         private readonly LangfuseConfig $config,
+        private readonly AuthFactory $auth,
     ) {}
 
     public function handlePromptingAgent(PromptingAgent $event): void
@@ -123,13 +126,11 @@ class LaravelAiSubscriber
 
     private function getOrCreateTrace(PromptingAgent|AgentPrompted $event): LangfuseTrace
     {
-        $agent = $event->prompt->agent;
-
         return $this->resolveTrace($event->invocationId, new TraceBody(
-            name: 'laravel-ai-' . $this->getShortClassName($agent),
+            name: 'laravel-ai-' . $this->getShortClassName($event->prompt->agent),
             input: $event->prompt->prompt,
-            sessionId: $this->resolveSessionId($agent),
-            userId: $this->resolveUserId($agent),
+            sessionId: $this->resolveSessionId($event->prompt->agent),
+            userId: $this->resolveUserId(),
             metadata: [
                 'model' => $event->prompt->model,
                 'source' => 'laravel-ai-auto-instrumentation',
@@ -139,40 +140,53 @@ class LaravelAiSubscriber
 
     private function getOrCreateTraceFromTool(InvokingTool $event): LangfuseTrace
     {
-        $agent = $event->agent;
-
         return $this->resolveTrace($event->invocationId, new TraceBody(
-            name: 'laravel-ai-' . $this->getShortClassName($agent),
-            sessionId: $this->resolveSessionId($agent),
-            userId: $this->resolveUserId($agent),
+            name: 'laravel-ai-' . $this->getShortClassName($event->agent),
+            sessionId: $this->resolveSessionId($event->agent),
+            userId: $this->resolveUserId(),
             metadata: [
                 'source' => 'laravel-ai-auto-instrumentation',
             ],
         ));
     }
 
+    /**
+     * Resolve the Langfuse sessionId from the agent, preferring an explicit
+     * HasSessionIdInterface implementation over RemembersConversations.
+     */
     private function resolveSessionId(object $agent): ?string
     {
-        if (! $this->config->laravelAiSessionTracingEnabled || ! $agent instanceof RemembersConversations) {
+        if (! $this->config->laravelAiSessionTracingEnabled) {
             return null;
         }
 
-        return $agent->currentConversation();
+        if ($agent instanceof HasSessionIdInterface) {
+            return $agent->getSessionId();
+        }
+
+        if ($agent instanceof RemembersConversations) {
+            return $agent->currentConversation();
+        }
+
+        return null;
     }
 
-    private function resolveUserId(object $agent): ?string
+    /**
+     * Resolve the Langfuse userId from the currently authenticated user, if any.
+     */
+    private function resolveUserId(): ?string
     {
-        if (! $this->config->laravelAiUserTracingEnabled || ! $agent instanceof RemembersConversations) {
+        if (! $this->config->laravelAiUserTracingEnabled) {
             return null;
         }
 
-        $participant = $agent->conversationParticipant();
+        $user = $this->auth->guard()->user();
 
-        if ($participant === null) {
+        if ($user === null) {
             return null;
         }
 
-        $id = get_object_vars($participant)['id'] ?? null;
+        $id = $user->getAuthIdentifier();
 
         return match (true) {
             is_string($id) => $id,

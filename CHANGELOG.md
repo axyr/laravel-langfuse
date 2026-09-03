@@ -10,10 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Laravel AI session and user tracing**: `LaravelAiSubscriber` now tags auto-instrumented
-  traces with `sessionId` and `userId` when the agent implements Laravel AI's
-  `RemembersConversations` contract, using `currentConversation()` and
-  `conversationParticipant()->id` respectively. This lets Langfuse's Sessions and
-  Users views group and filter traces from agents with multi-turn memory.
+  traces with `userId` and `sessionId`, so Langfuse's Sessions and Users views can group
+  and filter them. Each identifier has its own independent source:
+  - `userId` comes from the currently authenticated user (`auth()->user()`), for any agent.
+  - `sessionId` comes from the agent, via the new `Axyr\Langfuse\Contracts\HasSessionIdInterface`
+    (`getSessionId()`) if implemented, otherwise from Laravel AI's `RemembersConversations`
+    contract (`currentConversation()`) if the agent implements that instead.
   Controlled independently via two new config values (both default `true`):
   `LANGFUSE_LARAVEL_AI_SESSION_TRACING` and `LANGFUSE_LARAVEL_AI_USER_TRACING`.
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Axyr\Langfuse\Cache\PromptCache;
 use Axyr\Langfuse\Config\LangfuseConfig;
+use Axyr\Langfuse\Contracts\HasSessionIdInterface;
 use Axyr\Langfuse\Contracts\LangfuseClientInterface;
 use Axyr\Langfuse\Contracts\PromptApiClientInterface;
 use Axyr\Langfuse\Contracts\ScoreApiClientInterface;
@@ -13,6 +14,9 @@ use Axyr\Langfuse\LaravelAi\LaravelAiSubscriber;
 use Axyr\Langfuse\Objects\NullLangfuseTrace;
 use Axyr\Langfuse\Prompt\PromptManager;
 use Axyr\Langfuse\Testing\RecordingEventBatcher;
+use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Contracts\Auth\Factory as AuthFactory;
+use Illuminate\Contracts\Auth\Guard;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\Providers\TextProvider;
 use Laravel\Ai\Contracts\RemembersConversations;
@@ -109,17 +113,19 @@ function makeLangfuseConfig(
     );
 }
 
-function makeSubscriber(LangfuseClientInterface $client, ?LangfuseConfig $config = null): LaravelAiSubscriber
-{
-    return new LaravelAiSubscriber($client, $config ?? makeLangfuseConfig());
+function makeSubscriber(
+    LangfuseClientInterface $client,
+    ?LangfuseConfig $config = null,
+    ?AuthFactory $auth = null,
+): LaravelAiSubscriber {
+    return new LaravelAiSubscriber($client, $config ?? makeLangfuseConfig(), $auth ?? makeAuthFactory());
 }
 
-function makeConversationalAgent(?string $conversationId = null, ?object $participant = null): Agent&RemembersConversations
+function makeConversationalAgent(?string $conversationId = null): Agent&RemembersConversations
 {
-    return new class ($conversationId, $participant) implements Agent, RemembersConversations {
+    return new class ($conversationId) implements Agent, RemembersConversations {
         public function __construct(
             private readonly ?string $conversationId,
-            private readonly ?object $participant,
         ) {}
 
         public function forUser(object $user): static
@@ -144,12 +150,12 @@ function makeConversationalAgent(?string $conversationId = null, ?object $partic
 
         public function hasConversationParticipant(): bool
         {
-            return $this->participant !== null;
+            return false;
         }
 
         public function conversationParticipant(): ?object
         {
-            return $this->participant;
+            return null;
         }
 
         public function messages(): iterable
@@ -157,6 +163,118 @@ function makeConversationalAgent(?string $conversationId = null, ?object $partic
             return [];
         }
     };
+}
+
+function makeSessionIdAgent(?string $sessionId): Agent&HasSessionIdInterface
+{
+    return new class ($sessionId) implements Agent, HasSessionIdInterface {
+        public function __construct(private readonly ?string $sessionId) {}
+
+        public function getSessionId(): ?string
+        {
+            return $this->sessionId;
+        }
+    };
+}
+
+function makeAgentWithBothSessionSources(?string $sessionId, ?string $conversationId): Agent&HasSessionIdInterface&RemembersConversations
+{
+    return new class ($sessionId, $conversationId) implements Agent, HasSessionIdInterface, RemembersConversations {
+        public function __construct(
+            private readonly ?string $sessionId,
+            private readonly ?string $conversationId,
+        ) {}
+
+        public function getSessionId(): ?string
+        {
+            return $this->sessionId;
+        }
+
+        public function forUser(object $user): static
+        {
+            return $this;
+        }
+
+        public function continue(string $conversationId, object $as): static
+        {
+            return $this;
+        }
+
+        public function continueLastConversation(object $as): static
+        {
+            return $this;
+        }
+
+        public function currentConversation(): ?string
+        {
+            return $this->conversationId;
+        }
+
+        public function hasConversationParticipant(): bool
+        {
+            return false;
+        }
+
+        public function conversationParticipant(): ?object
+        {
+            return null;
+        }
+
+        public function messages(): iterable
+        {
+            return [];
+        }
+    };
+}
+
+function makeAuthenticatable(int|string $id): Authenticatable
+{
+    return new class ($id) implements Authenticatable {
+        public function __construct(private readonly int|string $id) {}
+
+        public function getAuthIdentifierName(): string
+        {
+            return 'id';
+        }
+
+        public function getAuthIdentifier(): mixed
+        {
+            return $this->id;
+        }
+
+        public function getAuthPasswordName(): string
+        {
+            return 'password';
+        }
+
+        public function getAuthPassword(): string
+        {
+            return '';
+        }
+
+        public function getRememberToken(): ?string
+        {
+            return null;
+        }
+
+        public function setRememberToken($value): void {}
+
+        public function getRememberTokenName(): string
+        {
+            return 'remember_token';
+        }
+    };
+}
+
+function makeAuthFactory(?Authenticatable $user = null): AuthFactory
+{
+    $guard = Mockery::mock(Guard::class);
+    $guard->shouldReceive('user')->andReturn($user);
+
+    $factory = Mockery::mock(AuthFactory::class);
+    $factory->shouldReceive('guard')->andReturn($guard);
+
+    return $factory;
 }
 
 it('registers correct event mappings in subscribe', function () {
@@ -528,14 +646,11 @@ it('captures response text as generation output', function () {
     expect($body['output'])->toBe('Why did the chicken cross the road?');
 });
 
-it('sets trace sessionId and userId from an agent that remembers conversations', function () {
+it('sets trace sessionId from an agent that remembers conversations', function () {
     [$client, $batcher] = makeLangfuseClient();
     $subscriber = makeSubscriber($client);
 
-    $agent = makeConversationalAgent(
-        conversationId: 'conversation-42',
-        participant: (object) ['id' => 'user-42'],
-    );
+    $agent = makeConversationalAgent(conversationId: 'conversation-42');
     $prompt = makeAgentPrompt(agent: $agent);
 
     $subscriber->handlePromptingAgent(new PromptingAgent(
@@ -548,11 +663,50 @@ it('sets trace sessionId and userId from an agent that remembers conversations',
     );
     $body = $traceEvent->body->toArray();
 
-    expect($body['sessionId'])->toBe('conversation-42')
-        ->and($body['userId'])->toBe('user-42');
+    expect($body['sessionId'])->toBe('conversation-42');
 });
 
-it('leaves trace sessionId and userId unset for an agent that does not remember conversations', function () {
+it('sets trace sessionId from an agent implementing HasSessionIdInterface', function () {
+    [$client, $batcher] = makeLangfuseClient();
+    $subscriber = makeSubscriber($client);
+
+    $agent = makeSessionIdAgent('custom-session-42');
+    $prompt = makeAgentPrompt(agent: $agent);
+
+    $subscriber->handlePromptingAgent(new PromptingAgent(
+        invocationId: 'inv-1',
+        prompt: $prompt,
+    ));
+
+    $traceEvent = collect($batcher->events())->first(
+        fn(IngestionEvent $e) => $e->type->value === 'trace-create',
+    );
+    $body = $traceEvent->body->toArray();
+
+    expect($body['sessionId'])->toBe('custom-session-42');
+});
+
+it('prefers HasSessionIdInterface over RemembersConversations for sessionId', function () {
+    [$client, $batcher] = makeLangfuseClient();
+    $subscriber = makeSubscriber($client);
+
+    $agent = makeAgentWithBothSessionSources(sessionId: 'explicit-session', conversationId: 'conversation-42');
+    $prompt = makeAgentPrompt(agent: $agent);
+
+    $subscriber->handlePromptingAgent(new PromptingAgent(
+        invocationId: 'inv-1',
+        prompt: $prompt,
+    ));
+
+    $traceEvent = collect($batcher->events())->first(
+        fn(IngestionEvent $e) => $e->type->value === 'trace-create',
+    );
+    $body = $traceEvent->body->toArray();
+
+    expect($body['sessionId'])->toBe('explicit-session');
+});
+
+it('leaves trace sessionId unset for an agent with no session source', function () {
     [$client, $batcher] = makeLangfuseClient();
     $subscriber = makeSubscriber($client);
 
@@ -568,39 +722,14 @@ it('leaves trace sessionId and userId unset for an agent that does not remember 
     );
     $body = $traceEvent->body->toArray();
 
-    expect($body)->not->toHaveKey('sessionId')
-        ->and($body)->not->toHaveKey('userId');
-});
-
-it('leaves trace userId unset when the agent has no conversation participant', function () {
-    [$client, $batcher] = makeLangfuseClient();
-    $subscriber = makeSubscriber($client);
-
-    $agent = makeConversationalAgent(conversationId: 'conversation-42', participant: null);
-    $prompt = makeAgentPrompt(agent: $agent);
-
-    $subscriber->handlePromptingAgent(new PromptingAgent(
-        invocationId: 'inv-1',
-        prompt: $prompt,
-    ));
-
-    $traceEvent = collect($batcher->events())->first(
-        fn(IngestionEvent $e) => $e->type->value === 'trace-create',
-    );
-    $body = $traceEvent->body->toArray();
-
-    expect($body['sessionId'])->toBe('conversation-42')
-        ->and($body)->not->toHaveKey('userId');
+    expect($body)->not->toHaveKey('sessionId');
 });
 
 it('does not set sessionId when laravel ai session tracing is disabled', function () {
     [$client, $batcher] = makeLangfuseClient();
     $subscriber = makeSubscriber($client, makeLangfuseConfig(laravelAiSessionTracingEnabled: false));
 
-    $agent = makeConversationalAgent(
-        conversationId: 'conversation-42',
-        participant: (object) ['id' => 'user-42'],
-    );
+    $agent = makeConversationalAgent(conversationId: 'conversation-42');
     $prompt = makeAgentPrompt(agent: $agent);
 
     $subscriber->handlePromptingAgent(new PromptingAgent(
@@ -613,19 +742,57 @@ it('does not set sessionId when laravel ai session tracing is disabled', functio
     );
     $body = $traceEvent->body->toArray();
 
-    expect($body)->not->toHaveKey('sessionId')
-        ->and($body['userId'])->toBe('user-42');
+    expect($body)->not->toHaveKey('sessionId');
+});
+
+it('sets trace userId from the currently authenticated user, regardless of agent type', function () {
+    [$client, $batcher] = makeLangfuseClient();
+    $subscriber = makeSubscriber($client, auth: makeAuthFactory(makeAuthenticatable('user-42')));
+
+    $prompt = makeAgentPrompt(agent: makeTestAgent());
+
+    $subscriber->handlePromptingAgent(new PromptingAgent(
+        invocationId: 'inv-1',
+        prompt: $prompt,
+    ));
+
+    $traceEvent = collect($batcher->events())->first(
+        fn(IngestionEvent $e) => $e->type->value === 'trace-create',
+    );
+    $body = $traceEvent->body->toArray();
+
+    expect($body['userId'])->toBe('user-42');
+});
+
+it('leaves trace userId unset when there is no authenticated user', function () {
+    [$client, $batcher] = makeLangfuseClient();
+    $subscriber = makeSubscriber($client, auth: makeAuthFactory(null));
+
+    $agent = makeConversationalAgent(conversationId: 'conversation-42');
+    $prompt = makeAgentPrompt(agent: $agent);
+
+    $subscriber->handlePromptingAgent(new PromptingAgent(
+        invocationId: 'inv-1',
+        prompt: $prompt,
+    ));
+
+    $traceEvent = collect($batcher->events())->first(
+        fn(IngestionEvent $e) => $e->type->value === 'trace-create',
+    );
+    $body = $traceEvent->body->toArray();
+
+    expect($body)->not->toHaveKey('userId');
 });
 
 it('does not set userId when laravel ai user tracing is disabled', function () {
     [$client, $batcher] = makeLangfuseClient();
-    $subscriber = makeSubscriber($client, makeLangfuseConfig(laravelAiUserTracingEnabled: false));
-
-    $agent = makeConversationalAgent(
-        conversationId: 'conversation-42',
-        participant: (object) ['id' => 'user-42'],
+    $subscriber = makeSubscriber(
+        $client,
+        makeLangfuseConfig(laravelAiUserTracingEnabled: false),
+        makeAuthFactory(makeAuthenticatable('user-42')),
     );
-    $prompt = makeAgentPrompt(agent: $agent);
+
+    $prompt = makeAgentPrompt(agent: makeTestAgent());
 
     $subscriber->handlePromptingAgent(new PromptingAgent(
         invocationId: 'inv-1',
@@ -637,18 +804,14 @@ it('does not set userId when laravel ai user tracing is disabled', function () {
     );
     $body = $traceEvent->body->toArray();
 
-    expect($body['sessionId'])->toBe('conversation-42')
-        ->and($body)->not->toHaveKey('userId');
+    expect($body)->not->toHaveKey('userId');
 });
 
 it('sets sessionId and userId on the tool span trace as well', function () {
     [$client, $batcher] = makeLangfuseClient();
-    $subscriber = makeSubscriber($client);
+    $subscriber = makeSubscriber($client, auth: makeAuthFactory(makeAuthenticatable('user-42')));
 
-    $agent = makeConversationalAgent(
-        conversationId: 'conversation-42',
-        participant: (object) ['id' => 'user-42'],
-    );
+    $agent = makeConversationalAgent(conversationId: 'conversation-42');
     $tool = makeTestTool();
 
     $subscriber->handleInvokingTool(new InvokingTool(

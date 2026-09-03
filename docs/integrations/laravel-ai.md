@@ -27,24 +27,50 @@ Multiple agent calls within the same request share a single trace. If you use `L
 
 ## Session and user tracking
 
-If your agent implements Laravel AI's `RemembersConversations` contract, its traces are automatically tagged with `sessionId` (from `currentConversation()`) and `userId` (from `conversationParticipant()->id`), so the Langfuse Sessions and Users views can group and filter them:
+Traces are automatically tagged with `userId` and `sessionId` so the Langfuse Sessions and Users views can group and filter them. Each identifier comes from its own, independent source:
+
+**`userId`** comes from the currently authenticated user, via `auth()->user()`. This works for any agent, since it doesn't depend on the agent at all, only on there being a logged-in user for the current request:
 
 ```php
-use Laravel\Ai\Contracts\RemembersConversations;
-use Laravel\Ai\Concerns\RemembersConversations as RemembersConversationsConcern;
-
-class SupportAgent implements Agent, RemembersConversations
-{
-    use RemembersConversationsConcern;
-
-    // ...
-}
-
-$agent = (new SupportAgent)->continueLastConversation((object) ['id' => $userId]);
-$agent->prompt('...');
+// Any agent, no interface required
+$response = (new SupportAgent)->prompt('Do something');
+// Traced with userId from auth()->user()->getAuthIdentifier(), if a user is logged in
 ```
 
-This is on by default. Turn either one off independently if you don't want that identifier forwarded to Langfuse:
+**`sessionId`** comes from the agent itself, since "session" is agent-specific and there's no framework-wide equivalent of `auth()->user()` for it. Two ways to provide it, checked in this order:
+
+1. Implement `Axyr\Langfuse\Contracts\HasSessionIdInterface`:
+
+    ```php
+    use Axyr\Langfuse\Contracts\HasSessionIdInterface;
+
+    class SupportAgent implements Agent, HasSessionIdInterface
+    {
+        public function getSessionId(): ?string
+        {
+            return $this->ticketId; // or whatever identifies this "conversation" to you
+        }
+    }
+    ```
+
+2. Or, if your agent already implements Laravel AI's `RemembersConversations` contract, its `currentConversation()` is used automatically:
+
+    ```php
+    use Laravel\Ai\Contracts\RemembersConversations;
+    use Laravel\Ai\Concerns\RemembersConversations as RemembersConversationsConcern;
+
+    class SupportAgent implements Agent, RemembersConversations
+    {
+        use RemembersConversationsConcern;
+
+        // ...
+    }
+
+    $agent = (new SupportAgent)->continueLastConversation((object) ['id' => $userId]);
+    $agent->prompt('...');
+    ```
+
+Both are on by default. Turn either one off independently if you don't want that identifier forwarded to Langfuse:
 
 ```env
 LANGFUSE_LARAVEL_AI_SESSION_TRACING=false
