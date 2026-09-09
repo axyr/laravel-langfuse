@@ -26,7 +26,7 @@
         "laravel/pint": "^1.0",
         "orchestra/testbench": "^10.0|^11.0",
         "pestphp/pest": "^4.0",
-        "phpmd/phpmd": "^2.0",
+        "phpmd/phpmd": "^2.15",
         "prism-php/prism": "^0.100"
     },
     "suggest": {
