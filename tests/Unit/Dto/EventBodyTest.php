@@ -101,3 +101,15 @@ it('implements SerializableInterface', function () {
 
     expect($event)->toBeInstanceOf(\Axyr\Langfuse\Contracts\SerializableInterface::class);
 });
+
+it('stamps an environment only when none is set', function () {
+    $body = new EventBody(id: 'evt-1', traceId: 'trace-1', parentObservationId: 'parent-1');
+
+    $stamped = $body->withEnvironment('production');
+
+    expect($stamped->environment)->toBe('production')
+        ->and($stamped->traceId)->toBe('trace-1')
+        ->and($stamped->parentObservationId)->toBe('parent-1')
+        ->and($body->withEnvironment(null))->toBe($body)
+        ->and($stamped->withEnvironment('staging'))->toBe($stamped);
+});

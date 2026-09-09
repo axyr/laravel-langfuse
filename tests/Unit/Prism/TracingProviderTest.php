@@ -7,9 +7,11 @@ use Axyr\Langfuse\Config\LangfuseConfig;
 use Axyr\Langfuse\Contracts\PromptApiClientInterface;
 use Axyr\Langfuse\Contracts\ScoreApiClientInterface;
 use Axyr\Langfuse\Dto\IngestionEvent;
+use Axyr\Langfuse\Dto\TextPrompt;
 use Axyr\Langfuse\LangfuseClient;
 use Axyr\Langfuse\Objects\NullLangfuseTrace;
 use Axyr\Langfuse\Prism\TracingProvider;
+use Axyr\Langfuse\Prompt\CurrentPromptRegistry;
 use Axyr\Langfuse\Prompt\PromptManager;
 use Axyr\Langfuse\Testing\RecordingEventBatcher;
 use Prism\Prism\Enums\FinishReason;
@@ -376,4 +378,42 @@ it('delegates images to inner provider', function () {
 
     expect($response)->toBe($imagesResponse)
         ->and($batcher->events())->toBeEmpty();
+});
+
+it('links the registered managed prompt to the generation', function () {
+    [$langfuse, $batcher] = makeTracingClient();
+    $registry = new CurrentPromptRegistry();
+    $registry->set(new TextPrompt(name: 'movie-critic', version: 7, prompt: 'text'));
+
+    $innerProvider = Mockery::mock(Provider::class);
+    $innerProvider->shouldReceive('text')->twice()->andReturn(makeTextResponse());
+
+    $provider = new TracingProvider($innerProvider, $langfuse, $registry);
+    $provider->text(makeTextRequest());
+    $provider->text(makeTextRequest());
+
+    $bodies = array_map(fn(IngestionEvent $e) => $e->toArray()['body'], $batcher->eventsOfType('generation-create'));
+
+    expect($bodies[0]['promptName'])->toBe('movie-critic')
+        ->and($bodies[0]['promptVersion'])->toBe(7)
+        ->and($bodies[1])->not->toHaveKey('promptName')
+        ->and($registry->current())->toBeNull();
+});
+
+it('links the registered managed prompt to a failed generation', function () {
+    [$langfuse, $batcher] = makeTracingClient();
+    $registry = new CurrentPromptRegistry();
+    $registry->set(new TextPrompt(name: 'movie-critic', version: 7, prompt: 'text'));
+
+    $innerProvider = Mockery::mock(Provider::class);
+    $innerProvider->shouldReceive('text')->once()->andThrow(new RuntimeException('API Error'));
+
+    $provider = new TracingProvider($innerProvider, $langfuse, $registry);
+
+    expect(fn() => $provider->text(makeTextRequest()))->toThrow(RuntimeException::class);
+
+    $body = $batcher->eventsOfType('generation-create')[0]->toArray()['body'];
+
+    expect($body['promptName'])->toBe('movie-critic')
+        ->and($registry->current())->toBeNull();
 });

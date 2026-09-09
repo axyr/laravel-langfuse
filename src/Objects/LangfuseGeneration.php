@@ -51,6 +51,7 @@ class LangfuseGeneration
                 usage: $usage,
                 statusMessage: $statusMessage,
                 level: $level,
+                environment: $this->body->environment,
             ),
         ));
     }

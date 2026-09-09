@@ -10,9 +10,9 @@ use Axyr\Langfuse\Contracts\PromptInterface;
  * Holds the most recently resolved managed prompt so auto-instrumentation can
  * link it to the generation it produced (promptName/promptVersion).
  *
- * PromptManager registers every non-fallback prompt it resolves; integrations
- * consume() it when creating a generation. Consuming clears the registry so a
- * prompt is never linked to more than one generation.
+ * The client registers every non-fallback prompt it resolves; integrations
+ * consume() it when they start recording a generation. Consuming clears the
+ * registry so a prompt is linked to at most one generation.
  */
 class CurrentPromptRegistry
 {
@@ -38,10 +38,5 @@ class CurrentPromptRegistry
         $this->prompt = null;
 
         return $prompt;
-    }
-
-    public function clear(): void
-    {
-        $this->prompt = null;
     }
 }

@@ -39,6 +39,23 @@ readonly class SpanBody implements SerializableInterface
 
     public function withContext(string $traceId, ?string $parentObservationId): self
     {
+        return $this->copy($traceId, $parentObservationId, $this->environment);
+    }
+
+    /**
+     * Returns a copy stamped with the given environment when this body has none.
+     */
+    public function withEnvironment(?string $environment): self
+    {
+        if ($environment === null || $this->environment !== null) {
+            return $this;
+        }
+
+        return $this->copy($this->traceId, $this->parentObservationId, $environment);
+    }
+
+    private function copy(?string $traceId, ?string $parentObservationId, ?string $environment): self
+    {
         return new self(
             id: $this->id,
             traceId: $traceId,
@@ -52,7 +69,7 @@ readonly class SpanBody implements SerializableInterface
             statusMessage: $this->statusMessage,
             parentObservationId: $parentObservationId,
             version: $this->version,
-            environment: $this->environment,
+            environment: $environment,
         );
     }
 

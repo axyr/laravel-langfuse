@@ -34,12 +34,3 @@ it('replaces a previously registered prompt', function () {
 
     expect($registry->consume()?->getName())->toBe('second');
 });
-
-it('can be cleared', function () {
-    $registry = new CurrentPromptRegistry();
-
-    $registry->set(new TextPrompt(name: 'movie-critic', version: 1, prompt: 'text'));
-    $registry->clear();
-
-    expect($registry->current())->toBeNull();
-});

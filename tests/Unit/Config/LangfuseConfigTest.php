@@ -263,3 +263,12 @@ it('defaults the environment to null', function () {
     expect(LangfuseConfig::fromArray([])->environment)->toBeNull()
         ->and(LangfuseConfig::fromArray(['environment' => ''])->environment)->toBeNull();
 });
+
+it('accepts well-formed environments', function (string $environment) {
+    expect(LangfuseConfig::fromArray(['environment' => $environment])->environment)->toBe($environment);
+})->with(['production', 'staging-eu_1', str_repeat('a', 40)]);
+
+it('rejects malformed environments', function (string $environment) {
+    LangfuseConfig::fromArray(['environment' => $environment]);
+})->with(['Production', 'staging.eu', 'langfuse-test', str_repeat('a', 41)])
+    ->throws(InvalidArgumentException::class, 'Invalid Langfuse environment');

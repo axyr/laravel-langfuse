@@ -29,6 +29,23 @@ readonly class ScoreBody implements SerializableInterface
 
     public function withTraceId(string $traceId): self
     {
+        return $this->copy($traceId, $this->environment);
+    }
+
+    /**
+     * Returns a copy stamped with the given environment when this body has none.
+     */
+    public function withEnvironment(?string $environment): self
+    {
+        if ($environment === null || $this->environment !== null) {
+            return $this;
+        }
+
+        return $this->copy($this->traceId, $environment);
+    }
+
+    private function copy(?string $traceId, ?string $environment): self
+    {
         return new self(
             name: $this->name,
             id: $this->id,
@@ -40,7 +57,7 @@ readonly class ScoreBody implements SerializableInterface
             comment: $this->comment,
             configId: $this->configId,
             sessionId: $this->sessionId,
-            environment: $this->environment,
+            environment: $environment,
         );
     }
 

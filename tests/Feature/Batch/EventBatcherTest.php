@@ -110,16 +110,3 @@ describe('NullEventBatcher', function () {
         expect($batcher->count())->toBe(0);
     });
 });
-
-it('passes the configured environment to the ingestion batch', function () {
-    $apiClient = Mockery::mock(IngestionApiClientInterface::class);
-    $apiClient->shouldReceive('send')
-        ->once()
-        ->with(Mockery::on(fn(IngestionBatch $batch): bool => $batch->environment === 'production'))
-        ->andReturn(IngestionResponse::fromArray(['successes' => [], 'errors' => []]));
-
-    $config = new LangfuseConfig(publicKey: 'pk', secretKey: 'sk', flushAt: 1, environment: 'production');
-    $batcher = new EventBatcher($apiClient, $config);
-
-    $batcher->enqueue(makeEvent('evt-1'));
-});

@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace Axyr\Langfuse\Prism;
 
 use Axyr\Langfuse\Contracts\LangfuseClientInterface;
+use Axyr\Langfuse\Contracts\PromptInterface;
 use Axyr\Langfuse\Dto\GenerationBody;
 use Axyr\Langfuse\Dto\TraceBody;
 use Axyr\Langfuse\Dto\Usage;
 use Axyr\Langfuse\Enums\ObservationLevel;
 use Axyr\Langfuse\Objects\NullLangfuseTrace;
+use Axyr\Langfuse\Prompt\CurrentPromptRegistry;
 use Generator;
 use Illuminate\Http\Client\RequestException;
 use Prism\Prism\Audio\AudioResponse as TextToSpeechResponse;
@@ -35,11 +37,13 @@ class TracingProvider extends Provider
     public function __construct(
         private readonly Provider $inner,
         private readonly LangfuseClientInterface $langfuse,
+        private readonly CurrentPromptRegistry $prompts = new CurrentPromptRegistry(),
     ) {}
 
     public function text(TextRequest $request): TextResponse
     {
         $startTime = microtime(true);
+        $managedPrompt = $this->prompts->consume();
 
         try {
             $response = $this->inner->text($request);
@@ -50,11 +54,12 @@ class TracingProvider extends Provider
                 usage: $response->usage,
                 finishReason: $response->finishReason->name,
                 startTime: $startTime,
+                managedPrompt: $managedPrompt,
             );
 
             return $response;
         } catch (\Throwable $e) {
-            $this->recordGenerationError($request, $e, $startTime);
+            $this->recordGenerationError($request, $e, $startTime, $managedPrompt);
 
             throw $e;
         }
@@ -63,6 +68,7 @@ class TracingProvider extends Provider
     public function structured(StructuredRequest $request): StructuredResponse
     {
         $startTime = microtime(true);
+        $managedPrompt = $this->prompts->consume();
 
         try {
             $response = $this->inner->structured($request);
@@ -73,11 +79,12 @@ class TracingProvider extends Provider
                 usage: $response->usage,
                 finishReason: $response->finishReason->name,
                 startTime: $startTime,
+                managedPrompt: $managedPrompt,
             );
 
             return $response;
         } catch (\Throwable $e) {
-            $this->recordGenerationError($request, $e, $startTime);
+            $this->recordGenerationError($request, $e, $startTime, $managedPrompt);
 
             throw $e;
         }
@@ -89,11 +96,12 @@ class TracingProvider extends Provider
     public function stream(TextRequest $request): Generator
     {
         $startTime = microtime(true);
+        $managedPrompt = $this->prompts->consume();
 
         try {
-            yield from $this->traceStream($request, $startTime);
+            yield from $this->traceStream($request, $startTime, $managedPrompt);
         } catch (\Throwable $e) {
-            $this->recordGenerationError($request, $e, $startTime);
+            $this->recordGenerationError($request, $e, $startTime, $managedPrompt);
 
             throw $e;
         }
@@ -132,7 +140,7 @@ class TracingProvider extends Provider
     /**
      * @return Generator<\Prism\Prism\Streaming\Events\StreamEvent>
      */
-    private function traceStream(TextRequest $request, float $startTime): Generator
+    private function traceStream(TextRequest $request, float $startTime, ?PromptInterface $managedPrompt): Generator
     {
         $text = '';
         $streamUsage = null;
@@ -157,6 +165,7 @@ class TracingProvider extends Provider
             usage: $streamUsage,
             finishReason: $finishReason,
             startTime: $startTime,
+            managedPrompt: $managedPrompt,
         );
     }
 
@@ -166,18 +175,15 @@ class TracingProvider extends Provider
         ?\Prism\Prism\ValueObjects\Usage $usage,
         ?string $finishReason,
         float $startTime,
+        ?PromptInterface $managedPrompt,
     ): void {
         $endTime = microtime(true);
 
         $trace = $this->createTrace($request);
 
-        $generation = $trace->generation(new GenerationBody(
-            name: $request->model(),
-            model: $request->model(),
-            input: $this->extractInput($request),
-            startTime: $this->formatTime($startTime),
-            modelParameters: $this->extractModelParameters($request),
-        ));
+        $generation = $trace->generation(
+            $this->buildGenerationBody($request, $startTime)->withPrompt($managedPrompt),
+        );
 
         $generation->end(
             endTime: $this->formatTime($endTime),
@@ -191,23 +197,31 @@ class TracingProvider extends Provider
         TextRequest|StructuredRequest $request,
         \Throwable $e,
         float $startTime,
+        ?PromptInterface $managedPrompt,
     ): void {
         $endTime = microtime(true);
 
         $trace = $this->createTrace($request, ['error' => $e->getMessage()]);
 
-        $generation = $trace->generation(new GenerationBody(
-            name: $request->model(),
-            model: $request->model(),
-            input: $this->extractInput($request),
-            startTime: $this->formatTime($startTime),
-            modelParameters: $this->extractModelParameters($request),
-        ));
+        $generation = $trace->generation(
+            $this->buildGenerationBody($request, $startTime)->withPrompt($managedPrompt),
+        );
 
         $generation->end(
             endTime: $this->formatTime($endTime),
             statusMessage: $e->getMessage(),
             level: ObservationLevel::ERROR,
+        );
+    }
+
+    private function buildGenerationBody(TextRequest|StructuredRequest $request, float $startTime): GenerationBody
+    {
+        return new GenerationBody(
+            name: $request->model(),
+            model: $request->model(),
+            input: $this->extractInput($request),
+            startTime: $this->formatTime($startTime),
+            modelParameters: $this->extractModelParameters($request),
         );
     }
 

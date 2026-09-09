@@ -14,6 +14,7 @@ use Axyr\Langfuse\Enums\EventType;
 use Axyr\Langfuse\Objects\LangfuseGeneration;
 use Axyr\Langfuse\Objects\LangfuseSpan;
 use Axyr\Langfuse\Objects\LangfuseTrace;
+use Axyr\Langfuse\Testing\RecordingEventBatcher;
 
 it('enqueues trace-create event on construction', function () {
     $batcher = Mockery::mock(EventBatcherInterface::class);
@@ -148,4 +149,46 @@ it('creates score referencing the trace', function () {
     );
 
     $trace->score(new ScoreBody(id: 'score-1', name: 'accuracy'));
+});
+
+it('propagates the trace environment to child observations and scores', function () {
+    $batcher = new RecordingEventBatcher();
+    $trace = new LangfuseTrace(
+        body: new TraceBody(id: 'trace-1', environment: 'staging'),
+        batcher: $batcher,
+    );
+
+    $trace->span(new SpanBody(id: 'span-1'));
+    $trace->generation(new GenerationBody(id: 'gen-1'));
+    $trace->event(new EventBody(id: 'evt-1'));
+    $trace->score(new ScoreBody(name: 'accuracy', value: 1.0));
+    $trace->update(new TraceBody(name: 'updated'));
+
+    $environments = array_map(
+        fn(IngestionEvent $event): ?string => $event->toArray()['body']['environment'] ?? null,
+        $batcher->events(),
+    );
+
+    expect($environments)->toBe(['staging', 'staging', 'staging', 'staging', 'staging', 'staging']);
+});
+
+it('keeps an explicit child environment over the trace environment', function () {
+    $batcher = new RecordingEventBatcher();
+    $trace = new LangfuseTrace(
+        body: new TraceBody(id: 'trace-1', environment: 'staging'),
+        batcher: $batcher,
+    );
+
+    $trace->generation(new GenerationBody(id: 'gen-1', environment: 'production'));
+
+    expect($batcher->events()[1]->toArray()['body']['environment'])->toBe('production');
+});
+
+it('leaves children without environment when the trace has none', function () {
+    $batcher = new RecordingEventBatcher();
+    $trace = new LangfuseTrace(body: new TraceBody(id: 'trace-1'), batcher: $batcher);
+
+    $trace->generation(new GenerationBody(id: 'gen-1'));
+
+    expect($batcher->events()[1]->toArray()['body'])->not->toHaveKey('environment');
 });

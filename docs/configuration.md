@@ -27,11 +27,11 @@ php artisan vendor:publish --tag=langfuse-config
 
 ## Environments
 
-Set `LANGFUSE_TRACING_ENVIRONMENT` (the same variable the official Langfuse SDKs use) to organize traces, observations, and scores from different deployments — e.g. `production`, `staging`, `local` — within a single Langfuse project.
+Set `LANGFUSE_TRACING_ENVIRONMENT` (the same variable the official Langfuse SDKs use) to organize traces, observations, and scores from different deployments (for example `production`, `staging`, `local`) within a single Langfuse project.
 
-The environment is stamped on every ingestion event that does not already carry one. This matters because **Langfuse environments are immutable after first ingestion**: setting the environment on a later trace update has no effect, so it must be present when the event is created.
+Traces and scores created through the client are stamped with the configured environment unless they set their own. A trace passes its environment down to every span, generation, event and score created from it, so a per-trace override such as `new TraceBody(environment: 'staging')` keeps the whole trace together. This matters because **Langfuse environments are immutable after first ingestion**: setting the environment on a later trace update has no effect, so it must be present when the event is created.
 
-Must match `^(?!langfuse)[a-z0-9-_]+$` (max 40 chars). When unset, Langfuse assigns `default`.
+Must match `^(?!langfuse)[a-z0-9-_]+$` (max 40 chars). Malformed values throw an `InvalidArgumentException` when the config is loaded, because Langfuse would otherwise reject every event. When unset, Langfuse assigns `default`.
 
 ## Disabling tracing
 

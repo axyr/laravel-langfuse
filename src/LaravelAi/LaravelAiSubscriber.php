@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Axyr\Langfuse\LaravelAi;
 
 use Axyr\Langfuse\Contracts\LangfuseClientInterface;
+use Axyr\Langfuse\Contracts\PromptInterface;
 use Axyr\Langfuse\Dto\GenerationBody;
 use Axyr\Langfuse\Dto\SpanBody;
 use Axyr\Langfuse\Dto\TraceBody;
@@ -36,14 +37,26 @@ class LaravelAiSubscriber
     /** @var array<string, float> */
     private array $toolStartTimes = [];
 
+    /** @var array<string, PromptInterface> */
+    private array $managedPrompts = [];
+
     public function __construct(
         private readonly LangfuseClientInterface $langfuse,
-        private readonly CurrentPromptRegistry $prompts,
+        private readonly CurrentPromptRegistry $prompts = new CurrentPromptRegistry(),
     ) {}
 
     public function handlePromptingAgent(PromptingAgent $event): void
     {
         $this->startTimes[$event->invocationId] = microtime(true);
+
+        // Capture the prompt resolved before this invocation right away, so prompts
+        // resolved by tools or nested agents during the run cannot replace it.
+        $managedPrompt = $this->prompts->consume();
+
+        if ($managedPrompt !== null) {
+            $this->managedPrompts[$event->invocationId] = $managedPrompt;
+        }
+
         $this->getOrCreateTrace($event);
     }
 
@@ -54,8 +67,18 @@ class LaravelAiSubscriber
 
         $trace = $this->getOrCreateTrace($event);
         $response = $event->response;
+        $model = $response->meta->model ?? $event->prompt->model;
 
-        $generation = $trace->generation($this->buildGenerationBody($event, $startTime));
+        $body = new GenerationBody(
+            name: $model,
+            model: $model,
+            input: $event->prompt->prompt,
+            startTime: $this->formatTime($startTime),
+        );
+
+        $generation = $trace->generation(
+            $body->withPrompt($this->managedPrompts[$event->invocationId] ?? null),
+        );
 
         $generation->end(
             endTime: $this->formatTime($endTime),
@@ -63,22 +86,7 @@ class LaravelAiSubscriber
             usage: $this->mapUsage($response->usage),
         );
 
-        unset($this->startTimes[$event->invocationId]);
-    }
-
-    private function buildGenerationBody(AgentPrompted|AgentStreamed $event, float $startTime): GenerationBody
-    {
-        $model = $event->response->meta->model ?? $event->prompt->model;
-        $managedPrompt = $this->prompts->consume();
-
-        return new GenerationBody(
-            name: $model,
-            startTime: $this->formatTime($startTime),
-            input: $event->prompt->prompt,
-            model: $model,
-            promptName: $managedPrompt?->getName(),
-            promptVersion: $managedPrompt?->getVersion(),
-        );
+        unset($this->startTimes[$event->invocationId], $this->managedPrompts[$event->invocationId]);
     }
 
     public function handleInvokingTool(InvokingTool $event): void

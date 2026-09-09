@@ -70,21 +70,19 @@ $prompt = Langfuse::createPrompt(new CreatePromptBody(
 
 ## Linking prompts to generations
 
-When a prompt is resolved through the prompt manager, it is registered in a request-scoped `CurrentPromptRegistry`. The Laravel AI auto-instrumentation consumes it when the next generation is recorded, setting `promptName` and `promptVersion` on the generation. In the Langfuse UI this links the generation to the exact prompt version that produced it, enabling per-version metrics (cost, latency, evaluation scores).
+When a prompt is resolved through `Langfuse::prompt()`, it is registered in a request-scoped `CurrentPromptRegistry`. The Laravel AI, Prism and Neuron AI auto-instrumentation consume it when they record their next generation, setting `promptName` and `promptVersion` on that generation. In the Langfuse UI this links the generation to the exact prompt version that produced it, enabling per-version metrics (cost, latency, evaluation scores).
 
-This is automatic: resolve the prompt via `Langfuse::getPrompt()` (or `PromptManager::get()`), run your agent, and the generation is linked. Each resolved prompt links to exactly one generation — fallback prompts are never linked, since they do not exist as versions in Langfuse.
+This is automatic: resolve the prompt via `Langfuse::prompt()`, run your agent or LLM call, and the generation is linked. Each resolved prompt links to at most one generation. Fallback prompts are never linked, since they do not exist as versions in Langfuse. With Laravel AI, the prompt is captured when the agent starts, so prompts resolved by tools or nested agents during the run link to their own generations rather than replacing the outer agent's prompt.
 
-For manual tracing, set the fields on the `GenerationBody` yourself:
+For manual tracing, link the prompt on the `GenerationBody` yourself:
 
 ```php
-$prompt = Langfuse::getPrompt('movie-critic', label: 'production');
+$prompt = Langfuse::prompt('movie-critic', label: 'production');
 
-$trace->generation(new GenerationBody(
-    name: 'gpt-4o',
-    promptName: $prompt->getName(),
-    promptVersion: $prompt->getVersion(),
-));
+$trace->generation((new GenerationBody(name: 'gpt-4o'))->withPrompt($prompt));
 ```
+
+`Langfuse::fake()` registers prompts as well, so a feature test can assert that the recorded generation carries `promptName` and `promptVersion`.
 
 ## Listing prompts
 

@@ -13,6 +13,7 @@ use Axyr\Langfuse\Contracts\PromptCacheInterface;
 use Axyr\Langfuse\Contracts\ScoreApiClientInterface;
 use Axyr\Langfuse\LangfuseClient;
 use Axyr\Langfuse\LangfuseServiceProvider;
+use Axyr\Langfuse\Prompt\CurrentPromptRegistry;
 use Axyr\Langfuse\Prompt\PromptManager;
 
 it('registers the service provider', function () {
@@ -117,4 +118,15 @@ it('reads config from environment', function () {
 
     expect($config->publicKey)->toBe('pk-test-env')
         ->and($config->secretKey)->toBe('sk-test-env');
+});
+
+it('binds CurrentPromptRegistry as scoped and forgets it between scopes', function () {
+    $registry1 = $this->app->make(CurrentPromptRegistry::class);
+    $registry2 = $this->app->make(CurrentPromptRegistry::class);
+
+    expect($registry1)->toBe($registry2);
+
+    $this->app->forgetScopedInstances();
+
+    expect($this->app->make(CurrentPromptRegistry::class))->not->toBe($registry1);
 });

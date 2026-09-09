@@ -12,6 +12,7 @@ use Axyr\Langfuse\Dto\Usage;
 use Axyr\Langfuse\Objects\LangfuseSpan;
 use Axyr\Langfuse\Objects\LangfuseTrace;
 use Axyr\Langfuse\Objects\NullLangfuseTrace;
+use Axyr\Langfuse\Prompt\CurrentPromptRegistry;
 use DateTimeImmutable;
 use DateTimeZone;
 use NeuronAI\Chat\Messages\Message;
@@ -51,6 +52,7 @@ class NeuronAiObserver implements ObserverInterface
 
     public function __construct(
         private readonly LangfuseClientInterface $langfuse,
+        private readonly CurrentPromptRegistry $prompts = new CurrentPromptRegistry(),
     ) {}
 
     public static function make(): self
@@ -93,11 +95,13 @@ class NeuronAiObserver implements ObserverInterface
         $startTime = $this->startTimes['inference'] ?? microtime(true);
         $trace = $this->getOrCreateTrace($source);
 
-        $generation = $trace->generation(new GenerationBody(
+        $body = new GenerationBody(
             name: 'inference',
             input: $this->extractInferenceInput($data),
             startTime: $this->formatTime($startTime),
-        ));
+        );
+
+        $generation = $trace->generation($body->withPrompt($this->prompts->consume()));
 
         $generation->end(
             endTime: $this->formatTime(microtime(true)),

@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 use Axyr\Langfuse\Dto\GenerationBody;
 use Axyr\Langfuse\Dto\ScoreBody;
+use Axyr\Langfuse\Dto\TextPrompt;
 use Axyr\Langfuse\Dto\TraceBody;
 use Axyr\Langfuse\LangfuseFacade;
+use Axyr\Langfuse\Prompt\CurrentPromptRegistry;
 use Axyr\Langfuse\Testing\LangfuseFake;
 
 it('swaps facade with fake', function () {
@@ -51,4 +53,13 @@ it('fake is enabled by default', function () {
     LangfuseFacade::fake();
 
     expect(LangfuseFacade::isEnabled())->toBeTrue();
+});
+
+it('shares the container prompt registry so fake prompts link to generations', function () {
+    $fake = LangfuseFacade::fake();
+    $fake->withPrompt(new TextPrompt(name: 'movie-critic', version: 7, prompt: 'text'));
+
+    LangfuseFacade::prompt('movie-critic');
+
+    expect($this->app->make(CurrentPromptRegistry::class)->current()?->getName())->toBe('movie-critic');
 });

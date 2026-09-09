@@ -10,6 +10,7 @@ use Axyr\Langfuse\Dto\TextPrompt;
 use Axyr\Langfuse\Dto\TraceBody;
 use Axyr\Langfuse\Dto\Usage;
 use Axyr\Langfuse\Exceptions\PromptNotFoundException;
+use Axyr\Langfuse\Prompt\CurrentPromptRegistry;
 use Axyr\Langfuse\Testing\LangfuseFake;
 
 it('records traces', function () {
@@ -162,4 +163,24 @@ it('chains assertions fluently', function () {
     $fake->assertTraceCreated('test')
         ->assertGenerationCreated('chat')
         ->assertScoreCreated('quality');
+});
+
+it('registers configured prompts for generation linking', function () {
+    $registry = new CurrentPromptRegistry();
+    $fake = new LangfuseFake($registry);
+    $prompt = new TextPrompt(name: 'movie-critic', version: 7, prompt: 'text');
+
+    $fake->withPrompt($prompt);
+    $fake->prompt('movie-critic');
+
+    expect($registry->current())->toBe($prompt);
+});
+
+it('does not register fallback prompts for generation linking', function () {
+    $registry = new CurrentPromptRegistry();
+    $fake = new LangfuseFake($registry);
+
+    $fake->prompt('unknown', fallback: 'Fallback');
+
+    expect($registry->current())->toBeNull();
 });

@@ -9,20 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Environments** — new `environment` config (`LANGFUSE_TRACING_ENVIRONMENT`, matching the
-  official Langfuse SDKs) stamped on every ingestion event body that does not set one.
-  Langfuse environments are immutable after first ingestion, so they must be present at
-  event creation; this applies to both the sync and queued batchers via `IngestionBatch`.
-- **Prompt-to-generation linking** — prompts resolved through `PromptManager::get()` are
-  registered in a request-scoped `CurrentPromptRegistry`; the Laravel AI subscriber consumes
-  the registered prompt when recording a generation and sets `promptName`/`promptVersion`,
-  enabling per-prompt-version metrics in Langfuse. Fallback prompts are never linked, and
-  each resolved prompt links to exactly one generation.
-
-### Changed
-
-- `PromptManager` is now bound as `scoped` (was `singleton`) so it always sees the current
-  scope's `CurrentPromptRegistry` under Octane and queue workers.
+- **Environments** - new `environment` config (`LANGFUSE_TRACING_ENVIRONMENT`, matching the
+  official Langfuse SDKs). Traces and scores created through the client are stamped with it
+  unless they set their own, and a trace passes its environment down to every span,
+  generation, event and score created from it. Langfuse environments are immutable after
+  first ingestion, so they are applied when the event is created. Malformed values are
+  rejected at config load with an `InvalidArgumentException` instead of silently failing
+  ingestion.
+- **Prompt-to-generation linking** - prompts resolved through `Langfuse::prompt()` are
+  registered in a request-scoped `CurrentPromptRegistry`. The Laravel AI, Prism and Neuron AI
+  integrations consume the registered prompt when they record their next generation and set
+  `promptName`/`promptVersion`, enabling per-prompt-version metrics in Langfuse. Fallback
+  prompts are never linked, and each resolved prompt links to at most one generation.
+  `GenerationBody::withPrompt()` is available for manual tracing, and `Langfuse::fake()`
+  registers prompts too so linking can be asserted in tests.
 
 ## [0.2.0] - 2026-06-28
 

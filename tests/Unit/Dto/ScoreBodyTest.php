@@ -149,3 +149,14 @@ it('allows construction without traceId', function () {
 
     expect($score->traceId)->toBeNull();
 });
+
+it('stamps an environment only when none is set', function () {
+    $body = new ScoreBody(name: 'accuracy', id: 'score-1', traceId: 'trace-1');
+
+    $stamped = $body->withEnvironment('production');
+
+    expect($stamped->environment)->toBe('production')
+        ->and($stamped->traceId)->toBe('trace-1')
+        ->and($body->withEnvironment(null))->toBe($body)
+        ->and($stamped->withEnvironment('staging'))->toBe($stamped);
+});

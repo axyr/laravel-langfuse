@@ -109,7 +109,7 @@ class LangfuseServiceProvider extends ServiceProvider
         $this->app->singleton(PromptCacheInterface::class, PromptCache::class);
 
         $this->app->scoped(CurrentPromptRegistry::class);
-        $this->app->scoped(PromptManager::class, function () {
+        $this->app->singleton(PromptManager::class, function () {
             /** @var LangfuseConfig $config */
             $config = $this->app->make(LangfuseConfig::class);
 
@@ -117,7 +117,6 @@ class LangfuseServiceProvider extends ServiceProvider
                 apiClient: $this->app->make(PromptApiClientInterface::class),
                 cache: $this->app->make(PromptCacheInterface::class),
                 cacheTtl: $config->promptCacheTtl,
-                registry: $this->app->make(CurrentPromptRegistry::class),
             );
         });
     }
@@ -174,6 +173,7 @@ class LangfuseServiceProvider extends ServiceProvider
                 app: $this->app,
                 inner: $manager,
                 langfuse: $this->app->make(LangfuseClientInterface::class),
+                prompts: $this->app->make(CurrentPromptRegistry::class),
             );
         });
     }
