@@ -23,6 +23,8 @@ readonly class LangfuseConfig
         public bool $neuronAiEnabled = false,
         public ?string $queue = null,
         public ?string $environment = null,
+        public bool $userTracingEnabled = true,
+        public bool $sessionTracingEnabled = true,
     ) {}
 
     /**
@@ -43,6 +45,8 @@ readonly class LangfuseConfig
             neuronAiEnabled: self::parseBool($config['neuron_ai_enabled'] ?? false),
             queue: self::parseNullableString($config['queue'] ?? null),
             environment: self::parseEnvironment($config['environment'] ?? null),
+            userTracingEnabled: self::parseBool($config['user_tracing'] ?? true),
+            sessionTracingEnabled: self::parseBool($config['session_tracing'] ?? true),
         );
     }
 

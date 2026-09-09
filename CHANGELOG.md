@@ -23,6 +23,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   prompts are never linked, and each resolved prompt links to at most one generation.
   `GenerationBody::withPrompt()` is available for manual tracing, and `Langfuse::fake()`
   registers prompts too so linking can be asserted in tests.
+- **User and session tracing** - traces created through the client get a default `userId`
+  and `sessionId` from a `TraceContextResolverInterface` when they do not set their own.
+  The default resolver reads the already authenticated user without triggering
+  authentication. The Laravel AI integration tags agent traces with the conversation id as
+  `sessionId` and the conversation participant as `userId`, including the first turn of a
+  new conversation and traces adopted from `LangfuseMiddleware` or manual tracing. Two new
+  switches, `LANGFUSE_USER_TRACING` and `LANGFUSE_SESSION_TRACING` (both default `true`),
+  turn either off. Resolver failures are logged and never interrupt the traced code.
+
+### Fixed
+
+- **Laravel AI traces had no output** - the response text is now set as the trace output,
+  but only on traces the integration created itself, so request traces, manual workflow
+  traces and traces shared by nested agents keep their own output.
+- `LangfuseTrace::update()` keeps the original trace timestamp instead of re-sending the
+  current time.
 
 ## [0.2.0] - 2026-06-28
 

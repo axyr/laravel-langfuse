@@ -16,6 +16,7 @@ use Axyr\Langfuse\Contracts\ObservationApiClientInterface;
 use Axyr\Langfuse\Contracts\PromptApiClientInterface;
 use Axyr\Langfuse\Contracts\PromptInterface;
 use Axyr\Langfuse\Contracts\ScoreApiClientInterface;
+use Axyr\Langfuse\Contracts\TraceContextResolverInterface;
 use Axyr\Langfuse\Dto\CreateDatasetBody;
 use Axyr\Langfuse\Dto\CreateDatasetItemBody;
 use Axyr\Langfuse\Dto\CreateDatasetRunItemBody;
@@ -45,6 +46,8 @@ use Axyr\Langfuse\Objects\LangfuseTrace;
 use Axyr\Langfuse\Objects\NullLangfuseTrace;
 use Axyr\Langfuse\Prompt\CurrentPromptRegistry;
 use Axyr\Langfuse\Prompt\PromptManager;
+use Axyr\Langfuse\Tracing\NullTraceContextResolver;
+use Illuminate\Support\Facades\Log;
 
 class LangfuseClient implements LangfuseClientInterface
 {
@@ -64,6 +67,7 @@ class LangfuseClient implements LangfuseClientInterface
         private readonly DatasetItemApiClientInterface $datasetItemApiClient,
         private readonly DatasetRunApiClientInterface $datasetRunApiClient,
         private readonly CurrentPromptRegistry $promptRegistry = new CurrentPromptRegistry(),
+        private readonly TraceContextResolverInterface $contextResolver = new NullTraceContextResolver(),
     ) {
         $this->currentTrace = new NullLangfuseTrace();
     }
@@ -71,9 +75,44 @@ class LangfuseClient implements LangfuseClientInterface
     public function trace(TraceBody $body): LangfuseTrace
     {
         return new LangfuseTrace(
-            body: $body->withEnvironment($this->config->environment),
+            body: $this->applyTraceContext($body->withEnvironment($this->config->environment)),
             batcher: $this->batcher,
         );
+    }
+
+    /**
+     * Fills in userId and sessionId from the context resolver when the body does
+     * not set them. Resolver failures must never break the traced code path.
+     */
+    private function applyTraceContext(TraceBody $body): TraceBody
+    {
+        try {
+            return $body
+                ->withUserId($this->resolveDefaultUserId($body))
+                ->withSessionId($this->resolveDefaultSessionId($body));
+        } catch (\Throwable $throwable) {
+            Log::warning('Langfuse trace context resolution failed', ['message' => $throwable->getMessage()]);
+
+            return $body;
+        }
+    }
+
+    private function resolveDefaultUserId(TraceBody $body): ?string
+    {
+        if (! $this->config->userTracingEnabled || $body->userId !== null) {
+            return null;
+        }
+
+        return $this->contextResolver->resolveUserId();
+    }
+
+    private function resolveDefaultSessionId(TraceBody $body): ?string
+    {
+        if (! $this->config->sessionTracingEnabled || $body->sessionId !== null) {
+            return null;
+        }
+
+        return $this->contextResolver->resolveSessionId();
     }
 
     public function currentTrace(): LangfuseTrace

@@ -272,3 +272,17 @@ it('rejects malformed environments', function (string $environment) {
     LangfuseConfig::fromArray(['environment' => $environment]);
 })->with(['Production', 'staging.eu', 'langfuse-test', str_repeat('a', 41)])
     ->throws(InvalidArgumentException::class, 'Invalid Langfuse environment');
+
+it('defaults user and session tracing to enabled', function () {
+    $config = LangfuseConfig::fromArray([]);
+
+    expect($config->userTracingEnabled)->toBeTrue()
+        ->and($config->sessionTracingEnabled)->toBeTrue();
+});
+
+it('parses user_tracing and session_tracing from array', function () {
+    $config = LangfuseConfig::fromArray(['user_tracing' => 'false', 'session_tracing' => false]);
+
+    expect($config->userTracingEnabled)->toBeFalse()
+        ->and($config->sessionTracingEnabled)->toBeFalse();
+});

@@ -6,6 +6,7 @@ namespace Axyr\Langfuse\Http\Middleware;
 
 use Axyr\Langfuse\Contracts\LangfuseClientInterface;
 use Axyr\Langfuse\Dto\TraceBody;
+use Axyr\Langfuse\Tracing\TraceUserId;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -22,11 +23,9 @@ class LangfuseMiddleware
             return $next($request);
         }
 
-        $authId = $request->user()?->getAuthIdentifier();
-
         $trace = $this->langfuse->trace(new TraceBody(
             name: $request->route()?->getName() ?? $request->method() . ' ' . $request->path(),
-            userId: is_scalar($authId) ? (string) $authId : null,
+            userId: TraceUserId::from($request->user()),
             metadata: [
                 'method' => $request->method(),
                 'url' => $request->fullUrl(),

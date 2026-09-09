@@ -21,6 +21,27 @@ The SDK listens to Laravel AI's event system:
 - **Agent prompts** - each `prompt()` or `stream()` call creates a trace and generation with model name, token usage, input, and output
 - **Tool invocations** - each tool call creates a span under the agent's trace with arguments and results
 
+## Users and sessions
+
+Agent traces are tagged with `userId` and `sessionId` so the Langfuse Users and Sessions views can group them. Both come from Laravel AI's own conversation state, so nothing needs to be implemented on the agent:
+
+- **`sessionId`** is the conversation id of an agent that uses `RemembersConversations`. A brand new conversation only gets its id after the first run, so the trace is tagged when the run completes.
+- **`userId`** is the conversation participant passed to `forUser()`, `continue()` or `continueLastConversation()`. This also works for queued agent runs, where no authenticated user exists. Agents without a participant fall back to the [package-wide default](../configuration.md#users-and-sessions), the authenticated user.
+
+```php
+class SupportAgent implements Agent
+{
+    use Promptable, RemembersConversations;
+}
+
+$response = (new SupportAgent)->forUser($user)->prompt('Hi');
+// trace: userId = $user->getKey(), sessionId = $response->conversationId
+```
+
+When agent calls nest under a request trace from `LangfuseMiddleware` or a manual trace, the session and user are added to that trace as well. Its output is left alone: only traces the integration created itself receive the agent's response text as output.
+
+Set `LANGFUSE_SESSION_TRACING=false` or `LANGFUSE_USER_TRACING=false` to stop forwarding either identifier. For a session that is not a Laravel AI conversation (a support ticket, a checkout), bind a custom `TraceContextResolverInterface` as described in the configuration docs.
+
 ## Request grouping
 
 Multiple agent calls within the same request share a single trace. If you use `LangfuseMiddleware`, agent generations nest under the request trace automatically.
