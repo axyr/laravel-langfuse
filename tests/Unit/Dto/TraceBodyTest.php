@@ -113,3 +113,18 @@ it('stamps an environment only when none is set', function () {
         ->and($body->withEnvironment(null))->toBe($body)
         ->and($stamped->withEnvironment('staging'))->toBe($stamped);
 });
+
+it('fills userId and sessionId only when unset', function () {
+    $body = new TraceBody(id: 'trace-1', environment: 'production');
+
+    $filled = $body->withUserId('42')->withSessionId('session-1');
+
+    expect($filled->userId)->toBe('42')
+        ->and($filled->sessionId)->toBe('session-1')
+        ->and($filled->environment)->toBe('production')
+        ->and($filled->id)->toBe('trace-1')
+        ->and($body->withUserId(null))->toBe($body)
+        ->and($body->withSessionId(null))->toBe($body)
+        ->and($filled->withUserId('other'))->toBe($filled)
+        ->and($filled->withSessionId('other'))->toBe($filled);
+});

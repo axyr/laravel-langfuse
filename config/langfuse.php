@@ -15,4 +15,6 @@ return [
     'neuron_ai_enabled' => env('LANGFUSE_NEURON_AI_ENABLED', false),
     'queue' => env('LANGFUSE_QUEUE', null),
     'environment' => env('LANGFUSE_TRACING_ENVIRONMENT', null),
+    'user_tracing' => env('LANGFUSE_USER_TRACING', true),
+    'session_tracing' => env('LANGFUSE_SESSION_TRACING', true),
 ];

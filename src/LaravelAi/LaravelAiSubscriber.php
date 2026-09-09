@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Axyr\Langfuse\LaravelAi;
 
+use Axyr\Langfuse\Config\LangfuseConfig;
 use Axyr\Langfuse\Contracts\LangfuseClientInterface;
 use Axyr\Langfuse\Contracts\PromptInterface;
 use Axyr\Langfuse\Dto\GenerationBody;
@@ -14,6 +15,7 @@ use Axyr\Langfuse\Objects\LangfuseSpan;
 use Axyr\Langfuse\Objects\LangfuseTrace;
 use Axyr\Langfuse\Objects\NullLangfuseTrace;
 use Axyr\Langfuse\Prompt\CurrentPromptRegistry;
+use Closure;
 use DateTimeImmutable;
 use DateTimeZone;
 use Laravel\Ai\Events\AgentPrompted;
@@ -31,6 +33,9 @@ class LaravelAiSubscriber
     /** @var array<string, LangfuseTrace> */
     private array $traces = [];
 
+    /** @var array<string, true> Invocations whose trace this subscriber created itself. */
+    private array $ownedInvocations = [];
+
     /** @var array<string, LangfuseSpan> */
     private array $toolSpans = [];
 
@@ -42,6 +47,7 @@ class LaravelAiSubscriber
 
     public function __construct(
         private readonly LangfuseClientInterface $langfuse,
+        private readonly LangfuseConfig $config,
         private readonly CurrentPromptRegistry $prompts = new CurrentPromptRegistry(),
     ) {}
 
@@ -57,7 +63,7 @@ class LaravelAiSubscriber
             $this->managedPrompts[$event->invocationId] = $managedPrompt;
         }
 
-        $this->getOrCreateTrace($event);
+        $this->resolveTrace($event->invocationId, fn(): TraceBody => $this->traceBodyFor($event));
     }
 
     public function handleAgentPrompted(AgentPrompted $event): void
@@ -65,7 +71,16 @@ class LaravelAiSubscriber
         $startTime = $this->startTimes[$event->invocationId] ?? microtime(true);
         $endTime = microtime(true);
 
-        $trace = $this->getOrCreateTrace($event);
+        $trace = $this->resolveTrace($event->invocationId, fn(): TraceBody => $this->traceBodyFor($event));
+
+        $this->recordGeneration($trace, $event, $startTime, $endTime);
+        $this->updateTrace($trace, $event);
+
+        unset($this->startTimes[$event->invocationId], $this->managedPrompts[$event->invocationId]);
+    }
+
+    private function recordGeneration(LangfuseTrace $trace, AgentPrompted $event, float $startTime, float $endTime): void
+    {
         $response = $event->response;
         $model = $response->meta->model ?? $event->prompt->model;
 
@@ -85,15 +100,16 @@ class LaravelAiSubscriber
             output: $response->text,
             usage: $this->mapUsage($response->usage),
         );
-
-        unset($this->startTimes[$event->invocationId], $this->managedPrompts[$event->invocationId]);
     }
 
     public function handleInvokingTool(InvokingTool $event): void
     {
         $this->toolStartTimes[$event->toolInvocationId] = microtime(true);
 
-        $trace = $this->getOrCreateTraceFromTool($event);
+        $trace = $this->resolveTrace($event->invocationId, fn(): TraceBody => new TraceBody(
+            name: 'laravel-ai-' . $this->getShortClassName($event->agent),
+            metadata: ['source' => 'laravel-ai-auto-instrumentation'],
+        ));
         $toolName = $this->getShortClassName($event->tool);
 
         $span = $trace->span(new SpanBody(
@@ -136,29 +152,60 @@ class LaravelAiSubscriber
         ];
     }
 
-    private function getOrCreateTrace(PromptingAgent|AgentPrompted $event): LangfuseTrace
+    private function traceBodyFor(PromptingAgent|AgentPrompted $event): TraceBody
     {
-        return $this->resolveTrace($event->invocationId, new TraceBody(
+        $context = $this->contextFor($event->prompt->agent);
+
+        return new TraceBody(
             name: 'laravel-ai-' . $this->getShortClassName($event->prompt->agent),
+            userId: $context->userId,
+            sessionId: $context->sessionId,
             input: $event->prompt->prompt,
             metadata: [
                 'model' => $event->prompt->model,
                 'source' => 'laravel-ai-auto-instrumentation',
             ],
-        ));
+        );
     }
 
-    private function getOrCreateTraceFromTool(InvokingTool $event): LangfuseTrace
+    /**
+     * Completes the trace once the run is done. The response text becomes the
+     * trace output only for traces this subscriber created, so a request trace or
+     * a manual workflow trace keeps its own output. Session and user ids are sent
+     * for every trace, since a new conversation only gets its id after the run.
+     */
+    private function updateTrace(LangfuseTrace $trace, AgentPrompted $event): void
     {
-        return $this->resolveTrace($event->invocationId, new TraceBody(
-            name: 'laravel-ai-' . $this->getShortClassName($event->agent),
-            metadata: [
-                'source' => 'laravel-ai-auto-instrumentation',
-            ],
+        $owned = isset($this->ownedInvocations[$event->invocationId]);
+        $context = $this->contextFor($event->prompt->agent, $event->response);
+
+        if (! $owned && $context->isEmpty()) {
+            return;
+        }
+
+        $trace->update(new TraceBody(
+            userId: $context->userId,
+            sessionId: $context->sessionId,
+            output: $owned ? $event->response->text : null,
         ));
     }
 
-    private function resolveTrace(string $invocationId, TraceBody $body): LangfuseTrace
+    private function contextFor(object $agent, ?object $response = null): ConversationContext
+    {
+        $context = $response === null
+            ? ConversationContext::fromAgent($agent)
+            : ConversationContext::fromResponse($response, $agent);
+
+        return $context->only(
+            session: $this->config->sessionTracingEnabled,
+            user: $this->config->userTracingEnabled,
+        );
+    }
+
+    /**
+     * @param Closure(): TraceBody $body Built only when a trace actually has to be created.
+     */
+    private function resolveTrace(string $invocationId, Closure $body): LangfuseTrace
     {
         if (isset($this->traces[$invocationId])) {
             return $this->traces[$invocationId];
@@ -172,9 +219,10 @@ class LaravelAiSubscriber
             return $existing;
         }
 
-        $trace = $this->langfuse->trace($body);
+        $trace = $this->langfuse->trace($body());
         $this->langfuse->setCurrentTrace($trace);
         $this->traces[$invocationId] = $trace;
+        $this->ownedInvocations[$invocationId] = true;
 
         return $trace;
     }

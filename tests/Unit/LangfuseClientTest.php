@@ -7,6 +7,7 @@ use Axyr\Langfuse\Config\LangfuseConfig;
 use Axyr\Langfuse\Contracts\EventBatcherInterface;
 use Axyr\Langfuse\Contracts\PromptApiClientInterface;
 use Axyr\Langfuse\Contracts\ScoreApiClientInterface;
+use Axyr\Langfuse\Contracts\TraceContextResolverInterface;
 use Axyr\Langfuse\Dto\IngestionEvent;
 use Axyr\Langfuse\Dto\ScoreBody;
 use Axyr\Langfuse\Dto\TraceBody;
@@ -204,4 +205,90 @@ it('does not register fallback prompts for generation linking', function () {
     $client->prompt('movie-critic', fallback: 'fallback text');
 
     expect($registry->current())->toBeNull();
+});
+
+function makeContextResolver(?string $userId, ?string $sessionId): TraceContextResolverInterface
+{
+    return new class ($userId, $sessionId) implements TraceContextResolverInterface {
+        public function __construct(private readonly ?string $userId, private readonly ?string $sessionId) {}
+
+        public function resolveUserId(): ?string
+        {
+            return $this->userId;
+        }
+
+        public function resolveSessionId(): ?string
+        {
+            return $this->sessionId;
+        }
+    };
+}
+
+function createClientWithResolver(RecordingEventBatcher $batcher, TraceContextResolverInterface $resolver, ?LangfuseConfig $config = null): LangfuseClient
+{
+    $promptApiClient = Mockery::mock(PromptApiClientInterface::class);
+
+    return new LangfuseClient(
+        $batcher,
+        $config ?? new LangfuseConfig(publicKey: 'pk', secretKey: 'sk'),
+        new PromptManager($promptApiClient, new PromptCache()),
+        Mockery::mock(ScoreApiClientInterface::class),
+        $promptApiClient,
+        Mockery::mock(\Axyr\Langfuse\Contracts\ObservationApiClientInterface::class),
+        Mockery::mock(\Axyr\Langfuse\Contracts\MetricsApiClientInterface::class),
+        Mockery::mock(\Axyr\Langfuse\Contracts\DatasetApiClientInterface::class),
+        Mockery::mock(\Axyr\Langfuse\Contracts\DatasetItemApiClientInterface::class),
+        Mockery::mock(\Axyr\Langfuse\Contracts\DatasetRunApiClientInterface::class),
+        new CurrentPromptRegistry(),
+        $resolver,
+    );
+}
+
+it('fills userId and sessionId from the context resolver', function () {
+    $batcher = new RecordingEventBatcher();
+    $client = createClientWithResolver($batcher, makeContextResolver('42', 'session-1'));
+
+    $client->trace(new TraceBody(id: 'trace-1'));
+
+    $body = $batcher->events()[0]->toArray()['body'];
+
+    expect($body['userId'])->toBe('42')
+        ->and($body['sessionId'])->toBe('session-1');
+});
+
+it('keeps explicit userId and sessionId over the resolver', function () {
+    $batcher = new RecordingEventBatcher();
+    $client = createClientWithResolver($batcher, makeContextResolver('42', 'session-1'));
+
+    $client->trace(new TraceBody(id: 'trace-1', userId: 'explicit-user', sessionId: 'explicit-session'));
+
+    $body = $batcher->events()[0]->toArray()['body'];
+
+    expect($body['userId'])->toBe('explicit-user')
+        ->and($body['sessionId'])->toBe('explicit-session');
+});
+
+it('ignores the resolver when user or session tracing is disabled', function () {
+    $batcher = new RecordingEventBatcher();
+    $config = new LangfuseConfig(publicKey: 'pk', secretKey: 'sk', userTracingEnabled: false, sessionTracingEnabled: false);
+    $client = createClientWithResolver($batcher, makeContextResolver('42', 'session-1'), $config);
+
+    $client->trace(new TraceBody(id: 'trace-1'));
+
+    $body = $batcher->events()[0]->toArray()['body'];
+
+    expect($body)->not->toHaveKey('userId')
+        ->and($body)->not->toHaveKey('sessionId');
+});
+
+it('leaves traces untouched without a resolver', function () {
+    $batcher = new RecordingEventBatcher();
+    $client = createClient($batcher);
+
+    $client->trace(new TraceBody(id: 'trace-1'));
+
+    $body = $batcher->events()[0]->toArray()['body'];
+
+    expect($body)->not->toHaveKey('userId')
+        ->and($body)->not->toHaveKey('sessionId');
 });

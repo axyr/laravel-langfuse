@@ -44,11 +44,40 @@ readonly class TraceBody implements SerializableInterface
             return $this;
         }
 
+        return $this->copy($this->userId, $this->sessionId, $environment);
+    }
+
+    /**
+     * Returns a copy with the given userId when this body has none.
+     */
+    public function withUserId(?string $userId): self
+    {
+        if ($userId === null || $this->userId !== null) {
+            return $this;
+        }
+
+        return $this->copy($userId, $this->sessionId, $this->environment);
+    }
+
+    /**
+     * Returns a copy with the given sessionId when this body has none.
+     */
+    public function withSessionId(?string $sessionId): self
+    {
+        if ($sessionId === null || $this->sessionId !== null) {
+            return $this;
+        }
+
+        return $this->copy($this->userId, $sessionId, $this->environment);
+    }
+
+    private function copy(?string $userId, ?string $sessionId, ?string $environment): self
+    {
         return new self(
             id: $this->id,
             name: $this->name,
-            userId: $this->userId,
-            sessionId: $this->sessionId,
+            userId: $userId,
+            sessionId: $sessionId,
             release: $this->release,
             version: $this->version,
             input: $this->input,

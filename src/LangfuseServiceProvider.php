@@ -28,8 +28,10 @@ use Axyr\Langfuse\Contracts\ObservationApiClientInterface;
 use Axyr\Langfuse\Contracts\PromptApiClientInterface;
 use Axyr\Langfuse\Contracts\PromptCacheInterface;
 use Axyr\Langfuse\Contracts\ScoreApiClientInterface;
+use Axyr\Langfuse\Contracts\TraceContextResolverInterface;
 use Axyr\Langfuse\Prompt\CurrentPromptRegistry;
 use Axyr\Langfuse\Prompt\PromptManager;
+use Axyr\Langfuse\Tracing\AuthTraceContextResolver;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
@@ -44,6 +46,7 @@ class LangfuseServiceProvider extends ServiceProvider
         $this->registerIngestion();
         $this->registerPrompts();
 
+        $this->app->singleton(TraceContextResolverInterface::class, AuthTraceContextResolver::class);
         $this->app->scoped(LangfuseClientInterface::class, LangfuseClient::class);
     }
 

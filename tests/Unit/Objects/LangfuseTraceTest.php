@@ -192,3 +192,15 @@ it('leaves children without environment when the trace has none', function () {
 
     expect($batcher->events()[1]->toArray()['body'])->not->toHaveKey('environment');
 });
+
+it('keeps the original timestamp on update', function () {
+    $batcher = new RecordingEventBatcher();
+    $trace = new LangfuseTrace(
+        body: new TraceBody(id: 'trace-1', timestamp: '2024-01-01T00:00:00Z'),
+        batcher: $batcher,
+    );
+
+    $trace->update(new TraceBody(output: 'done'));
+
+    expect($batcher->events()[1]->toArray()['body']['timestamp'])->toBe('2024-01-01T00:00:00Z');
+});

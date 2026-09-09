@@ -47,6 +47,7 @@ class LangfuseTrace
                 metadata: $body->metadata,
                 tags: $body->tags,
                 public: $body->public,
+                timestamp: $this->body->timestamp,
                 environment: $body->environment ?? $this->body->environment,
             ),
         ));
