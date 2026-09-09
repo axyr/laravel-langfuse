@@ -10,6 +10,7 @@ use Axyr\Langfuse\Dto\SpanBody;
 use Axyr\Langfuse\Enums\EventType;
 use Axyr\Langfuse\Objects\LangfuseGeneration;
 use Axyr\Langfuse\Objects\LangfuseSpan;
+use Axyr\Langfuse\Testing\RecordingEventBatcher;
 
 it('enqueues span-create event on construction', function () {
     $batcher = Mockery::mock(EventBatcherInterface::class);
@@ -129,4 +130,24 @@ it('sends span-update event on end', function () {
     );
 
     $span->end(output: 'done');
+});
+
+it('propagates the span environment to nested observations and its end update', function () {
+    $batcher = new RecordingEventBatcher();
+    $span = new LangfuseSpan(
+        body: new SpanBody(id: 'span-1', traceId: 'trace-1', environment: 'staging'),
+        batcher: $batcher,
+    );
+
+    $span->span(new SpanBody(id: 'span-2'));
+    $span->generation(new GenerationBody(id: 'gen-1'))->end();
+    $span->event(new EventBody(id: 'evt-1'));
+    $span->end();
+
+    $environments = array_map(
+        fn(IngestionEvent $event): ?string => $event->toArray()['body']['environment'] ?? null,
+        $batcher->events(),
+    );
+
+    expect($environments)->toBe(['staging', 'staging', 'staging', 'staging', 'staging', 'staging']);
 });

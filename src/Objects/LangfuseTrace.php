@@ -47,7 +47,7 @@ class LangfuseTrace
                 metadata: $body->metadata,
                 tags: $body->tags,
                 public: $body->public,
-                environment: $body->environment,
+                environment: $body->environment ?? $this->body->environment,
             ),
         ));
     }
@@ -55,7 +55,7 @@ class LangfuseTrace
     public function span(SpanBody $span): LangfuseSpan
     {
         return new LangfuseSpan(
-            body: $span->withTraceId($this->body->id),
+            body: $span->withTraceId($this->body->id)->withEnvironment($this->body->environment),
             batcher: $this->batcher,
         );
     }
@@ -63,7 +63,7 @@ class LangfuseTrace
     public function generation(GenerationBody $generation): LangfuseGeneration
     {
         return new LangfuseGeneration(
-            body: $generation->withTraceId($this->body->id),
+            body: $generation->withTraceId($this->body->id)->withEnvironment($this->body->environment),
             batcher: $this->batcher,
         );
     }
@@ -72,7 +72,7 @@ class LangfuseTrace
     {
         $this->batcher->enqueue($this->createIngestionEvent(
             type: EventType::EventCreate,
-            body: $event->withTraceId($this->body->id),
+            body: $event->withTraceId($this->body->id)->withEnvironment($this->body->environment),
         ));
     }
 
@@ -80,7 +80,7 @@ class LangfuseTrace
     {
         $this->batcher->enqueue($this->createIngestionEvent(
             type: EventType::ScoreCreate,
-            body: $score->withTraceId($this->body->id),
+            body: $score->withTraceId($this->body->id)->withEnvironment($this->body->environment),
         ));
     }
 }

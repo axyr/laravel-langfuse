@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Axyr\Langfuse\Dto;
 
+use Axyr\Langfuse\Contracts\PromptInterface;
 use Axyr\Langfuse\Contracts\SerializableInterface;
 use Axyr\Langfuse\Enums\ObservationLevel;
 
@@ -46,6 +47,59 @@ readonly class GenerationBody implements SerializableInterface
 
     public function withContext(string $traceId, ?string $parentObservationId): self
     {
+        return $this->copy(
+            traceId: $traceId,
+            parentObservationId: $parentObservationId,
+            environment: $this->environment,
+            promptName: $this->promptName,
+            promptVersion: $this->promptVersion,
+        );
+    }
+
+    /**
+     * Returns a copy stamped with the given environment when this body has none.
+     */
+    public function withEnvironment(?string $environment): self
+    {
+        if ($environment === null || $this->environment !== null) {
+            return $this;
+        }
+
+        return $this->copy(
+            traceId: $this->traceId,
+            parentObservationId: $this->parentObservationId,
+            environment: $environment,
+            promptName: $this->promptName,
+            promptVersion: $this->promptVersion,
+        );
+    }
+
+    /**
+     * Returns a copy linked to the given managed prompt when this body is not
+     * already linked to one. Fallback prompts are never linked.
+     */
+    public function withPrompt(?PromptInterface $prompt): self
+    {
+        if ($prompt === null || $prompt->isFallback() || $this->promptName !== null) {
+            return $this;
+        }
+
+        return $this->copy(
+            traceId: $this->traceId,
+            parentObservationId: $this->parentObservationId,
+            environment: $this->environment,
+            promptName: $prompt->getName(),
+            promptVersion: $prompt->getVersion(),
+        );
+    }
+
+    private function copy(
+        ?string $traceId,
+        ?string $parentObservationId,
+        ?string $environment,
+        ?string $promptName,
+        ?int $promptVersion,
+    ): self {
         return new self(
             id: $this->id,
             traceId: $traceId,
@@ -63,9 +117,9 @@ readonly class GenerationBody implements SerializableInterface
             model: $this->model,
             modelParameters: $this->modelParameters,
             usage: $this->usage,
-            promptName: $this->promptName,
-            promptVersion: $this->promptVersion,
-            environment: $this->environment,
+            promptName: $promptName,
+            promptVersion: $promptVersion,
+            environment: $environment,
         );
     }
 

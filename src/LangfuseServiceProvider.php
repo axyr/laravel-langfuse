@@ -28,6 +28,7 @@ use Axyr\Langfuse\Contracts\ObservationApiClientInterface;
 use Axyr\Langfuse\Contracts\PromptApiClientInterface;
 use Axyr\Langfuse\Contracts\PromptCacheInterface;
 use Axyr\Langfuse\Contracts\ScoreApiClientInterface;
+use Axyr\Langfuse\Prompt\CurrentPromptRegistry;
 use Axyr\Langfuse\Prompt\PromptManager;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Facades\Event;
@@ -107,6 +108,7 @@ class LangfuseServiceProvider extends ServiceProvider
         $this->app->singleton(PromptApiClientInterface::class, PromptApiClient::class);
         $this->app->singleton(PromptCacheInterface::class, PromptCache::class);
 
+        $this->app->scoped(CurrentPromptRegistry::class);
         $this->app->singleton(PromptManager::class, function () {
             /** @var LangfuseConfig $config */
             $config = $this->app->make(LangfuseConfig::class);
@@ -171,6 +173,7 @@ class LangfuseServiceProvider extends ServiceProvider
                 app: $this->app,
                 inner: $manager,
                 langfuse: $this->app->make(LangfuseClientInterface::class),
+                prompts: $this->app->make(CurrentPromptRegistry::class),
             );
         });
     }

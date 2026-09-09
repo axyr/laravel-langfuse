@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Axyr\Langfuse\Prism;
 
 use Axyr\Langfuse\Contracts\LangfuseClientInterface;
+use Axyr\Langfuse\Prompt\CurrentPromptRegistry;
 use Closure;
 use Illuminate\Contracts\Foundation\Application;
 use Prism\Prism\Enums\Provider as ProviderEnum;
@@ -17,6 +18,7 @@ class TracingPrismManager extends PrismManager
         Application $app,
         private readonly PrismManager $inner,
         private readonly LangfuseClientInterface $langfuse,
+        private readonly CurrentPromptRegistry $prompts = new CurrentPromptRegistry(),
     ) {
         parent::__construct($app);
     }
@@ -28,7 +30,7 @@ class TracingPrismManager extends PrismManager
     {
         $provider = $this->inner->resolve($name, $providerConfig);
 
-        return new TracingProvider($provider, $this->langfuse);
+        return new TracingProvider($provider, $this->langfuse, $this->prompts);
     }
 
     public function extend(string $provider, Closure $callback): PrismManager

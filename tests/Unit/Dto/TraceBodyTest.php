@@ -101,3 +101,15 @@ it('implements SerializableInterface', function () {
 
     expect($trace)->toBeInstanceOf(\Axyr\Langfuse\Contracts\SerializableInterface::class);
 });
+
+it('stamps an environment only when none is set', function () {
+    $body = new TraceBody(id: 'trace-1', timestamp: '2024-01-01T00:00:00Z');
+
+    $stamped = $body->withEnvironment('production');
+
+    expect($stamped->environment)->toBe('production')
+        ->and($stamped->id)->toBe('trace-1')
+        ->and($stamped->timestamp)->toBe('2024-01-01T00:00:00Z')
+        ->and($body->withEnvironment(null))->toBe($body)
+        ->and($stamped->withEnvironment('staging'))->toBe($stamped);
+});

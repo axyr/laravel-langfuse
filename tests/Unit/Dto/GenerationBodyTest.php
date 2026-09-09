@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use Axyr\Langfuse\Dto\GenerationBody;
+use Axyr\Langfuse\Dto\PromptFactory;
+use Axyr\Langfuse\Dto\TextPrompt;
 use Axyr\Langfuse\Dto\Usage;
 use Axyr\Langfuse\Enums\ObservationLevel;
 
@@ -138,4 +140,35 @@ it('includes empty usage in serialization when explicitly set', function () {
 
     expect($gen->toArray())->toHaveKey('usage')
         ->and($gen->toArray()['usage'])->toBe([]);
+});
+
+it('stamps an environment only when none is set', function () {
+    $body = new GenerationBody(id: 'gen-1', traceId: 'trace-1', promptName: 'p', promptVersion: 1);
+
+    $stamped = $body->withEnvironment('production');
+
+    expect($stamped->environment)->toBe('production')
+        ->and($stamped->traceId)->toBe('trace-1')
+        ->and($stamped->promptName)->toBe('p')
+        ->and($body->withEnvironment(null))->toBe($body)
+        ->and($stamped->withEnvironment('staging'))->toBe($stamped);
+});
+
+it('links a managed prompt only when not already linked', function () {
+    $body = new GenerationBody(id: 'gen-1', environment: 'production');
+    $prompt = new TextPrompt(name: 'movie-critic', version: 7, prompt: 'text');
+
+    $linked = $body->withPrompt($prompt);
+
+    expect($linked->promptName)->toBe('movie-critic')
+        ->and($linked->promptVersion)->toBe(7)
+        ->and($linked->environment)->toBe('production')
+        ->and($body->withPrompt(null))->toBe($body)
+        ->and($linked->withPrompt(new TextPrompt(name: 'other', version: 1, prompt: 'x')))->toBe($linked);
+});
+
+it('never links fallback prompts', function () {
+    $body = new GenerationBody(id: 'gen-1');
+
+    expect($body->withPrompt(PromptFactory::fallbackText('movie-critic', 'text')))->toBe($body);
 });

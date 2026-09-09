@@ -37,6 +37,7 @@ use Axyr\Langfuse\Dto\ScoreResponse;
 use Axyr\Langfuse\Dto\TraceBody;
 use Axyr\Langfuse\Objects\LangfuseTrace;
 use Axyr\Langfuse\Objects\NullLangfuseTrace;
+use Axyr\Langfuse\Prompt\CurrentPromptRegistry;
 use PHPUnit\Framework\Assert;
 
 /**
@@ -87,8 +88,9 @@ class LangfuseFake implements LangfuseClientInterface
     /** @var array<CreatePromptBody> */
     private array $createdPrompts = [];
 
-    public function __construct()
-    {
+    public function __construct(
+        private readonly CurrentPromptRegistry $promptRegistry = new CurrentPromptRegistry(),
+    ) {
         $this->batcher = new RecordingEventBatcher();
         $this->currentTrace = new NullLangfuseTrace();
     }
@@ -346,6 +348,8 @@ class LangfuseFake implements LangfuseClientInterface
         string|array|null $fallback = null,
     ): PromptInterface {
         if (isset($this->promptResponses[$name])) {
+            $this->promptRegistry->set($this->promptResponses[$name]);
+
             return $this->promptResponses[$name];
         }
 

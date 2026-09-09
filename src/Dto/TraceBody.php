@@ -36,6 +36,32 @@ readonly class TraceBody implements SerializableInterface
     }
 
     /**
+     * Returns a copy stamped with the given environment when this body has none.
+     */
+    public function withEnvironment(?string $environment): self
+    {
+        if ($environment === null || $this->environment !== null) {
+            return $this;
+        }
+
+        return new self(
+            id: $this->id,
+            name: $this->name,
+            userId: $this->userId,
+            sessionId: $this->sessionId,
+            release: $this->release,
+            version: $this->version,
+            input: $this->input,
+            output: $this->output,
+            metadata: $this->metadata,
+            tags: $this->tags,
+            public: $this->public,
+            timestamp: $this->timestamp,
+            environment: $environment,
+        );
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function toArray(): array

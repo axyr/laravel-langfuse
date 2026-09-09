@@ -37,7 +37,9 @@ class LangfuseSpan
     public function span(SpanBody $span): self
     {
         return new self(
-            body: $span->withContext($this->body->traceId ?? '', $this->body->id),
+            body: $span
+                ->withContext($this->body->traceId ?? '', $this->body->id)
+                ->withEnvironment($this->body->environment),
             batcher: $this->batcher,
         );
     }
@@ -45,7 +47,9 @@ class LangfuseSpan
     public function generation(GenerationBody $generation): LangfuseGeneration
     {
         return new LangfuseGeneration(
-            body: $generation->withContext($this->body->traceId ?? '', $this->body->id),
+            body: $generation
+                ->withContext($this->body->traceId ?? '', $this->body->id)
+                ->withEnvironment($this->body->environment),
             batcher: $this->batcher,
         );
     }
@@ -54,7 +58,9 @@ class LangfuseSpan
     {
         $this->batcher->enqueue($this->createIngestionEvent(
             type: EventType::EventCreate,
-            body: $event->withContext($this->body->traceId ?? '', $this->body->id),
+            body: $event
+                ->withContext($this->body->traceId ?? '', $this->body->id)
+                ->withEnvironment($this->body->environment),
         ));
     }
 
@@ -71,6 +77,7 @@ class LangfuseSpan
                 endTime: $endTime ?? $this->generateTimestamp(),
                 output: $output,
                 statusMessage: $statusMessage,
+                environment: $this->body->environment,
             ),
         ));
     }

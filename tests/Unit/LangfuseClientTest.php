@@ -14,7 +14,9 @@ use Axyr\Langfuse\Enums\EventType;
 use Axyr\Langfuse\LangfuseClient;
 use Axyr\Langfuse\Objects\LangfuseTrace;
 use Axyr\Langfuse\Objects\NullLangfuseTrace;
+use Axyr\Langfuse\Prompt\CurrentPromptRegistry;
 use Axyr\Langfuse\Prompt\PromptManager;
+use Axyr\Langfuse\Testing\RecordingEventBatcher;
 
 function createClient(EventBatcherInterface $batcher, ?LangfuseConfig $config = null): LangfuseClient
 {
@@ -122,4 +124,84 @@ it('reports enabled state from config', function () {
 
     expect($enabledClient->isEnabled())->toBeTrue()
         ->and($disabledClient->isEnabled())->toBeFalse();
+});
+
+it('stamps the configured environment on traces that lack one', function () {
+    $batcher = new RecordingEventBatcher();
+    $client = createClient($batcher, new LangfuseConfig(publicKey: 'pk', secretKey: 'sk', environment: 'production'));
+
+    $client->trace(new TraceBody(id: 'trace-1'));
+
+    expect($batcher->events()[0]->toArray()['body']['environment'])->toBe('production');
+});
+
+it('keeps an explicit trace environment over the configured one', function () {
+    $batcher = new RecordingEventBatcher();
+    $client = createClient($batcher, new LangfuseConfig(publicKey: 'pk', secretKey: 'sk', environment: 'production'));
+
+    $client->trace(new TraceBody(id: 'trace-1', environment: 'staging'));
+
+    expect($batcher->events()[0]->toArray()['body']['environment'])->toBe('staging');
+});
+
+it('leaves traces without environment when none is configured', function () {
+    $batcher = new RecordingEventBatcher();
+    $client = createClient($batcher);
+
+    $client->trace(new TraceBody(id: 'trace-1'));
+
+    expect($batcher->events()[0]->toArray()['body'])->not->toHaveKey('environment');
+});
+
+it('stamps the configured environment on scores', function () {
+    $batcher = new RecordingEventBatcher();
+    $client = createClient($batcher, new LangfuseConfig(publicKey: 'pk', secretKey: 'sk', environment: 'production'));
+
+    $client->score(new ScoreBody(name: 'accuracy', value: 1.0));
+
+    expect($batcher->events()[0]->toArray()['body']['environment'])->toBe('production');
+});
+
+function createClientWithPrompt(?array $apiResponse, CurrentPromptRegistry $registry): LangfuseClient
+{
+    $promptApiClient = Mockery::mock(PromptApiClientInterface::class);
+    $promptApiClient->shouldReceive('get')->once()->andReturn($apiResponse);
+
+    return new LangfuseClient(
+        new RecordingEventBatcher(),
+        new LangfuseConfig(publicKey: 'pk', secretKey: 'sk'),
+        new PromptManager($promptApiClient, new PromptCache()),
+        Mockery::mock(ScoreApiClientInterface::class),
+        $promptApiClient,
+        Mockery::mock(\Axyr\Langfuse\Contracts\ObservationApiClientInterface::class),
+        Mockery::mock(\Axyr\Langfuse\Contracts\MetricsApiClientInterface::class),
+        Mockery::mock(\Axyr\Langfuse\Contracts\DatasetApiClientInterface::class),
+        Mockery::mock(\Axyr\Langfuse\Contracts\DatasetItemApiClientInterface::class),
+        Mockery::mock(\Axyr\Langfuse\Contracts\DatasetRunApiClientInterface::class),
+        $registry,
+    );
+}
+
+it('registers resolved prompts for generation linking', function () {
+    $registry = new CurrentPromptRegistry();
+    $client = createClientWithPrompt([
+        'name' => 'movie-critic',
+        'version' => 4,
+        'type' => 'text',
+        'prompt' => 'from api',
+    ], $registry);
+
+    $client->prompt('movie-critic');
+
+    expect($registry->current()?->getName())->toBe('movie-critic')
+        ->and($registry->current()?->getVersion())->toBe(4);
+});
+
+it('does not register fallback prompts for generation linking', function () {
+    $registry = new CurrentPromptRegistry();
+    $client = createClientWithPrompt(null, $registry);
+
+    $client->prompt('movie-critic', fallback: 'fallback text');
+
+    expect($registry->current())->toBeNull();
 });

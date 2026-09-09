@@ -4,8 +4,12 @@ declare(strict_types=1);
 
 namespace Axyr\Langfuse\Config;
 
+use InvalidArgumentException;
+
 readonly class LangfuseConfig
 {
+    public const ENVIRONMENT_PATTERN = '/^(?!langfuse)[a-z0-9_-]{1,40}$/';
+
     public function __construct(
         public string $publicKey,
         public string $secretKey,
@@ -18,6 +22,7 @@ readonly class LangfuseConfig
         public bool $laravelAiEnabled = false,
         public bool $neuronAiEnabled = false,
         public ?string $queue = null,
+        public ?string $environment = null,
     ) {}
 
     /**
@@ -37,7 +42,32 @@ readonly class LangfuseConfig
             laravelAiEnabled: self::parseBool($config['laravel_ai_enabled'] ?? false),
             neuronAiEnabled: self::parseBool($config['neuron_ai_enabled'] ?? false),
             queue: self::parseNullableString($config['queue'] ?? null),
+            environment: self::parseEnvironment($config['environment'] ?? null),
         );
+    }
+
+    /**
+     * Langfuse environments are immutable once ingested and are rejected server-side
+     * when malformed, so an invalid value is refused up front instead of silently
+     * dropping every event.
+     */
+    private static function parseEnvironment(mixed $value): ?string
+    {
+        $environment = self::parseNullableString($value);
+
+        if ($environment === null) {
+            return null;
+        }
+
+        if (preg_match(self::ENVIRONMENT_PATTERN, $environment) !== 1) {
+            throw new InvalidArgumentException(sprintf(
+                'Invalid Langfuse environment "%s": it must match %s (lowercase letters, digits, hyphens and underscores, max 40 characters, not starting with "langfuse").',
+                $environment,
+                self::ENVIRONMENT_PATTERN,
+            ));
+        }
+
+        return $environment;
     }
 
     private static function parseNullableString(mixed $value): ?string

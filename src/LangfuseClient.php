@@ -43,6 +43,7 @@ use Axyr\Langfuse\Dto\TraceBody;
 use Axyr\Langfuse\Enums\EventType;
 use Axyr\Langfuse\Objects\LangfuseTrace;
 use Axyr\Langfuse\Objects\NullLangfuseTrace;
+use Axyr\Langfuse\Prompt\CurrentPromptRegistry;
 use Axyr\Langfuse\Prompt\PromptManager;
 
 class LangfuseClient implements LangfuseClientInterface
@@ -62,6 +63,7 @@ class LangfuseClient implements LangfuseClientInterface
         private readonly DatasetApiClientInterface $datasetApiClient,
         private readonly DatasetItemApiClientInterface $datasetItemApiClient,
         private readonly DatasetRunApiClientInterface $datasetRunApiClient,
+        private readonly CurrentPromptRegistry $promptRegistry = new CurrentPromptRegistry(),
     ) {
         $this->currentTrace = new NullLangfuseTrace();
     }
@@ -69,7 +71,7 @@ class LangfuseClient implements LangfuseClientInterface
     public function trace(TraceBody $body): LangfuseTrace
     {
         return new LangfuseTrace(
-            body: $body,
+            body: $body->withEnvironment($this->config->environment),
             batcher: $this->batcher,
         );
     }
@@ -88,7 +90,7 @@ class LangfuseClient implements LangfuseClientInterface
     {
         $this->batcher->enqueue($this->createIngestionEvent(
             type: EventType::ScoreCreate,
-            body: $body,
+            body: $body->withEnvironment($this->config->environment),
         ));
     }
 
@@ -198,7 +200,11 @@ class LangfuseClient implements LangfuseClientInterface
         ?string $label = null,
         string|array|null $fallback = null,
     ): PromptInterface {
-        return $this->promptManager->get($name, $version, $label, $fallback);
+        $prompt = $this->promptManager->get($name, $version, $label, $fallback);
+
+        $this->promptRegistry->set($prompt);
+
+        return $prompt;
     }
 
     public function createPrompt(CreatePromptBody $body): ?PromptInterface

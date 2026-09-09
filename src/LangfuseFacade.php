@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Axyr\Langfuse;
 
 use Axyr\Langfuse\Contracts\LangfuseClientInterface;
+use Axyr\Langfuse\Prompt\CurrentPromptRegistry;
 use Axyr\Langfuse\Testing\LangfuseFake;
 use Illuminate\Support\Facades\Facade;
 
@@ -43,7 +44,7 @@ class LangfuseFacade extends Facade
 {
     public static function fake(): LangfuseFake
     {
-        $fake = new LangfuseFake();
+        $fake = new LangfuseFake(app(CurrentPromptRegistry::class));
         static::swap($fake);
 
         return $fake;

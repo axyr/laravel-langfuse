@@ -7,9 +7,11 @@ use Axyr\Langfuse\Config\LangfuseConfig;
 use Axyr\Langfuse\Contracts\PromptApiClientInterface;
 use Axyr\Langfuse\Contracts\ScoreApiClientInterface;
 use Axyr\Langfuse\Dto\IngestionEvent;
+use Axyr\Langfuse\Dto\TextPrompt;
 use Axyr\Langfuse\LangfuseClient;
 use Axyr\Langfuse\LaravelAi\LaravelAiSubscriber;
 use Axyr\Langfuse\Objects\NullLangfuseTrace;
+use Axyr\Langfuse\Prompt\CurrentPromptRegistry;
 use Axyr\Langfuse\Prompt\PromptManager;
 use Axyr\Langfuse\Testing\RecordingEventBatcher;
 use Laravel\Ai\Contracts\Agent;
@@ -462,4 +464,85 @@ it('captures response text as generation output', function () {
     $body = $updateEvent->body->toArray();
 
     expect($body['output'])->toBe('Why did the chicken cross the road?');
+});
+
+function generationCreateBodies(RecordingEventBatcher $batcher): array
+{
+    return array_map(
+        fn(IngestionEvent $event): array => $event->toArray()['body'],
+        $batcher->eventsOfType('generation-create'),
+    );
+}
+
+function runAgentInvocation(LaravelAiSubscriber $subscriber, string $invocationId): void
+{
+    $prompt = makeAgentPrompt();
+    $subscriber->handlePromptingAgent(new PromptingAgent(invocationId: $invocationId, prompt: $prompt));
+    $subscriber->handleAgentPrompted(new AgentPrompted(
+        invocationId: $invocationId,
+        prompt: $prompt,
+        response: makeAgentResponse(invocationId: $invocationId),
+    ));
+}
+
+it('links the registered managed prompt to the generation and consumes it', function () {
+    [$client, $batcher] = makeLangfuseClient();
+    $registry = new CurrentPromptRegistry();
+    $subscriber = new LaravelAiSubscriber($client, $registry);
+
+    $registry->set(new TextPrompt(name: 'movie-critic', version: 7, prompt: 'text'));
+
+    runAgentInvocation($subscriber, 'inv-1');
+    runAgentInvocation($subscriber, 'inv-2');
+
+    [$first, $second] = generationCreateBodies($batcher);
+
+    expect($first['promptName'])->toBe('movie-critic')
+        ->and($first['promptVersion'])->toBe(7)
+        ->and($registry->current())->toBeNull()
+        ->and($second)->not->toHaveKey('promptName');
+});
+
+it('keeps the prompt captured at invocation start when a nested prompt is resolved during the run', function () {
+    [$client, $batcher] = makeLangfuseClient();
+    $registry = new CurrentPromptRegistry();
+    $subscriber = new LaravelAiSubscriber($client, $registry);
+    $prompt = makeAgentPrompt();
+
+    $registry->set(new TextPrompt(name: 'movie-critic', version: 7, prompt: 'text'));
+    $subscriber->handlePromptingAgent(new PromptingAgent(invocationId: 'outer', prompt: $prompt));
+
+    // A tool resolves another prompt and runs a nested agent while the outer agent is in flight.
+    $registry->set(new TextPrompt(name: 'summarizer', version: 2, prompt: 'text'));
+    runAgentInvocation($subscriber, 'nested');
+
+    $subscriber->handleAgentPrompted(new AgentPrompted(
+        invocationId: 'outer',
+        prompt: $prompt,
+        response: makeAgentResponse(invocationId: 'outer'),
+    ));
+
+    [$nested, $outer] = generationCreateBodies($batcher);
+
+    expect($nested['promptName'])->toBe('summarizer')
+        ->and($nested['promptVersion'])->toBe(2)
+        ->and($outer['promptName'])->toBe('movie-critic')
+        ->and($outer['promptVersion'])->toBe(7);
+});
+
+it('does not leak a prompt from a failed invocation into the next generation', function () {
+    [$client, $batcher] = makeLangfuseClient();
+    $registry = new CurrentPromptRegistry();
+    $subscriber = new LaravelAiSubscriber($client, $registry);
+
+    $registry->set(new TextPrompt(name: 'movie-critic', version: 7, prompt: 'text'));
+    // The provider throws after PromptingAgent, so AgentPrompted never fires for inv-1.
+    $subscriber->handlePromptingAgent(new PromptingAgent(invocationId: 'inv-1', prompt: makeAgentPrompt()));
+
+    runAgentInvocation($subscriber, 'inv-2');
+
+    [$body] = generationCreateBodies($batcher);
+
+    expect($body)->not->toHaveKey('promptName')
+        ->and($registry->current())->toBeNull();
 });

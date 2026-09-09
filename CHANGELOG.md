@@ -5,6 +5,25 @@ All notable changes to `axyr/laravel-langfuse` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Environments** - new `environment` config (`LANGFUSE_TRACING_ENVIRONMENT`, matching the
+  official Langfuse SDKs). Traces and scores created through the client are stamped with it
+  unless they set their own, and a trace passes its environment down to every span,
+  generation, event and score created from it. Langfuse environments are immutable after
+  first ingestion, so they are applied when the event is created. Malformed values are
+  rejected at config load with an `InvalidArgumentException` instead of silently failing
+  ingestion.
+- **Prompt-to-generation linking** - prompts resolved through `Langfuse::prompt()` are
+  registered in a request-scoped `CurrentPromptRegistry`. The Laravel AI, Prism and Neuron AI
+  integrations consume the registered prompt when they record their next generation and set
+  `promptName`/`promptVersion`, enabling per-prompt-version metrics in Langfuse. Fallback
+  prompts are never linked, and each resolved prompt links to at most one generation.
+  `GenerationBody::withPrompt()` is available for manual tracing, and `Langfuse::fake()`
+  registers prompts too so linking can be asserted in tests.
+
 ## [0.2.0] - 2026-06-28
 
 ### Added

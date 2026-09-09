@@ -7,9 +7,11 @@ use Axyr\Langfuse\Config\LangfuseConfig;
 use Axyr\Langfuse\Contracts\PromptApiClientInterface;
 use Axyr\Langfuse\Contracts\ScoreApiClientInterface;
 use Axyr\Langfuse\Dto\IngestionEvent;
+use Axyr\Langfuse\Dto\TextPrompt;
 use Axyr\Langfuse\LangfuseClient;
 use Axyr\Langfuse\NeuronAi\NeuronAiObserver;
 use Axyr\Langfuse\Objects\NullLangfuseTrace;
+use Axyr\Langfuse\Prompt\CurrentPromptRegistry;
 use Axyr\Langfuse\Prompt\PromptManager;
 use Axyr\Langfuse\Testing\RecordingEventBatcher;
 use NeuronAI\Chat\Messages\Message;
@@ -391,4 +393,25 @@ it('handles full workflow with inference and tools', function () {
         ->and($types)->toContain('generation-update')
         ->and($types)->toContain('span-create')
         ->and($types)->toContain('span-update');
+});
+
+it('links the registered managed prompt to the inference generation', function () {
+    [$client, $batcher] = makeNeuronLangfuseClient();
+    $registry = new CurrentPromptRegistry();
+    $registry->set(new TextPrompt(name: 'movie-critic', version: 7, prompt: 'text'));
+    $observer = new NeuronAiObserver($client, $registry);
+    $agent = makeTestNeuronAgent();
+    $message = makeNeuronMessage('What is PHP?');
+
+    foreach ([1, 2] as $_) {
+        $observer->onEvent('inference-start', $agent, new InferenceStart($message));
+        $observer->onEvent('inference-stop', $agent, new InferenceStop(message: $message, response: $message));
+    }
+
+    $bodies = array_map(fn(IngestionEvent $e) => $e->toArray()['body'], $batcher->eventsOfType('generation-create'));
+
+    expect($bodies[0]['promptName'])->toBe('movie-critic')
+        ->and($bodies[0]['promptVersion'])->toBe(7)
+        ->and($bodies[1])->not->toHaveKey('promptName')
+        ->and($registry->current())->toBeNull();
 });

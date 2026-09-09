@@ -252,3 +252,23 @@ it('should not enable prism when both are disabled', function () {
 
     expect($config->shouldEnablePrism())->toBeFalse();
 });
+
+it('parses the environment from config', function () {
+    $config = LangfuseConfig::fromArray(['environment' => 'production']);
+
+    expect($config->environment)->toBe('production');
+});
+
+it('defaults the environment to null', function () {
+    expect(LangfuseConfig::fromArray([])->environment)->toBeNull()
+        ->and(LangfuseConfig::fromArray(['environment' => ''])->environment)->toBeNull();
+});
+
+it('accepts well-formed environments', function (string $environment) {
+    expect(LangfuseConfig::fromArray(['environment' => $environment])->environment)->toBe($environment);
+})->with(['production', 'staging-eu_1', str_repeat('a', 40)]);
+
+it('rejects malformed environments', function (string $environment) {
+    LangfuseConfig::fromArray(['environment' => $environment]);
+})->with(['Production', 'staging.eu', 'langfuse-test', str_repeat('a', 41)])
+    ->throws(InvalidArgumentException::class, 'Invalid Langfuse environment');
