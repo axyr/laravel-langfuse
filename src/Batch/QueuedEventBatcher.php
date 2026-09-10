@@ -4,55 +4,26 @@ declare(strict_types=1);
 
 namespace Axyr\Langfuse\Batch;
 
-use Axyr\Langfuse\Config\LangfuseConfig;
-use Axyr\Langfuse\Contracts\EventBatcherInterface;
 use Axyr\Langfuse\Dto\IngestionBatch;
-use Axyr\Langfuse\Dto\IngestionEvent;
+use Axyr\Langfuse\Dto\Otlp\OtlpExportRequest;
 use Axyr\Langfuse\Jobs\SendIngestionBatchJob;
-use Illuminate\Support\Facades\Log;
+use Axyr\Langfuse\Jobs\SendOtelBatchJob;
 
-class QueuedEventBatcher implements EventBatcherInterface
+/**
+ * Hands the serialised payloads to the queue. The 4 MB split happens before
+ * dispatch, so a queued payload stays bounded.
+ */
+class QueuedEventBatcher extends AbstractEventBatcher
 {
-    /** @var array<IngestionEvent> */
-    private array $queue = [];
-
-    public function __construct(
-        private readonly LangfuseConfig $config,
-    ) {}
-
-    public function enqueue(IngestionEvent $event): void
+    protected function sendObservations(OtlpExportRequest $request): void
     {
-        $this->queue[] = $event;
-
-        if (count($this->queue) >= $this->config->flushAt) {
-            $this->flush();
-        }
+        SendOtelBatchJob::dispatch($request->toArray(), $request->spanCount())
+            ->onQueue($this->config->queue);
     }
 
-    public function flush(): void
+    protected function sendScores(IngestionBatch $batch): void
     {
-        if ($this->queue === []) {
-            return;
-        }
-
-        $events = $this->queue;
-        $this->queue = [];
-
-        try {
-            $batch = new IngestionBatch(
-                batch: $events,
-                metadata: $this->config->batchMetadata(count($events)),
-            );
-
-            SendIngestionBatchJob::dispatch($batch->toArray())
-                ->onQueue($this->config->queue);
-        } catch (\Throwable $throwable) {
-            Log::warning('Langfuse flush error', ['message' => $throwable->getMessage()]);
-        }
-    }
-
-    public function count(): int
-    {
-        return count($this->queue);
+        SendIngestionBatchJob::dispatch($batch->toArray())
+            ->onQueue($this->config->queue);
     }
 }

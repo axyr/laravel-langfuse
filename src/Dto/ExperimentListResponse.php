@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 namespace Axyr\Langfuse\Dto;
 
-readonly class DatasetRunListResponse
+readonly class ExperimentListResponse
 {
     /**
-     * @param  array<DatasetRunResponse>  $data
+     * @param  array<ExperimentResponse>  $data
      */
     public function __construct(
         public array $data,
-        public PromptListMeta $meta,
+        public CursorMeta $meta,
     ) {}
 
     /**
@@ -27,10 +27,10 @@ readonly class DatasetRunListResponse
 
         return new self(
             data: array_map(
-                fn(array $item): DatasetRunResponse => DatasetRunResponse::fromArray($item),
+                fn(array $item): ExperimentResponse => ExperimentResponse::fromArray($item),
                 $items,
             ),
-            meta: PromptListMeta::fromArray($meta),
+            meta: CursorMeta::fromArray($meta),
         );
     }
 }

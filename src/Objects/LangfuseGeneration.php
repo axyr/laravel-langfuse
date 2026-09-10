@@ -4,24 +4,43 @@ declare(strict_types=1);
 
 namespace Axyr\Langfuse\Objects;
 
-use Axyr\Langfuse\Concerns\CreatesIngestionEvents;
+use Axyr\Langfuse\Contracts\EndsOnShutdownInterface;
 use Axyr\Langfuse\Contracts\EventBatcherInterface;
 use Axyr\Langfuse\Dto\GenerationBody;
+use Axyr\Langfuse\Dto\IdGenerator;
 use Axyr\Langfuse\Dto\Usage;
-use Axyr\Langfuse\Enums\EventType;
 use Axyr\Langfuse\Enums\ObservationLevel;
+use Axyr\Langfuse\Tracing\CompletedObservation;
+use Axyr\Langfuse\Tracing\TraceContext;
+use Illuminate\Support\Facades\Log;
 
-class LangfuseGeneration
+/**
+ * A generation is built in memory and exported once, by `end()`.
+ */
+class LangfuseGeneration implements EndsOnShutdownInterface
 {
-    use CreatesIngestionEvents;
+    protected GenerationBody $body;
+
+    protected EventBatcherInterface $batcher;
+
+    protected TraceContext $context;
+
+    protected ?OpenObservationRegistry $registry;
+
+    protected bool $ended = false;
+
     public function __construct(
-        private readonly GenerationBody $body,
-        private readonly EventBatcherInterface $batcher,
+        GenerationBody $body,
+        EventBatcherInterface $batcher,
+        TraceContext $context,
+        ?OpenObservationRegistry $registry = null,
     ) {
-        $this->batcher->enqueue($this->createIngestionEvent(
-            type: EventType::GenerationCreate,
-            body: $this->body,
-        ));
+        $this->body = $body->startedAt(IdGenerator::timestamp());
+        $this->batcher = $batcher;
+        $this->context = $context;
+        $this->registry = $registry;
+
+        $this->registry?->register($this);
     }
 
     public function getId(): string
@@ -34,6 +53,16 @@ class LangfuseGeneration
         return $this->body->traceId;
     }
 
+    public function getBody(): GenerationBody
+    {
+        return $this->body;
+    }
+
+    public function hasEnded(): bool
+    {
+        return $this->ended;
+    }
+
     public function end(
         ?string $endTime = null,
         mixed $output = null,
@@ -41,18 +70,28 @@ class LangfuseGeneration
         ?string $statusMessage = null,
         ?ObservationLevel $level = null,
     ): void {
-        $this->batcher->enqueue($this->createIngestionEvent(
-            type: EventType::GenerationUpdate,
-            body: new GenerationBody(
-                id: $this->body->id,
-                traceId: $this->body->traceId,
-                endTime: $endTime ?? $this->generateTimestamp(),
-                output: $output,
-                usage: $usage,
-                statusMessage: $statusMessage,
-                level: $level,
-                environment: $this->body->environment,
-            ),
-        ));
+        if ($this->ended) {
+            Log::warning('Langfuse generation ended twice', ['observationId' => $this->getId()]);
+
+            return;
+        }
+
+        $this->ended = true;
+        $this->registry?->unregister($this);
+
+        $this->body = $this->body->completed(
+            endTime: $endTime ?? IdGenerator::timestamp(),
+            output: $output,
+            usage: $usage,
+            statusMessage: $statusMessage,
+            level: $level,
+        );
+
+        $this->batcher->enqueue(CompletedObservation::generation($this->body, $this->context));
+    }
+
+    public function endOnShutdown(): void
+    {
+        $this->end(statusMessage: 'ended by shutdown', level: ObservationLevel::WARNING);
     }
 }

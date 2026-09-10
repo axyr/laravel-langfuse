@@ -5,13 +5,14 @@ declare(strict_types=1);
 namespace Tests\Fixtures;
 
 /**
- * Shared score read-API fixtures, modelled on the payloads in
- * docs/openapi/langfuse.yml (GET /api/public/v2/scores[/{scoreId}]).
+ * Shared score read-API fixtures, modelled on the v3 payloads in
+ * docs/openapi/langfuse.yml (GET /api/public/v3/scores). `value` is polymorphic
+ * and there is no `stringValue`; what a score is attached to lives in `subject`.
  */
 class ScoreFixtures
 {
     /**
-     * A single NUMERIC score as returned by GET /api/public/v2/scores/{scoreId}.
+     * A NUMERIC score on an observation, with the details and subject field groups.
      *
      * @return array<string, mixed>
      */
@@ -19,8 +20,7 @@ class ScoreFixtures
     {
         return [
             'id' => 'score-abc',
-            'traceId' => 'trace-123',
-            'observationId' => 'obs-1',
+            'projectId' => 'project-1',
             'name' => 'accuracy',
             'source' => 'API',
             'timestamp' => '2024-05-01T12:00:00.000Z',
@@ -31,11 +31,16 @@ class ScoreFixtures
             'environment' => 'production',
             'dataType' => 'NUMERIC',
             'value' => 0.95,
+            'subject' => [
+                'kind' => 'observation',
+                'id' => '0192f1b42c7e7a1b',
+                'traceId' => '0192f1b42c7e7a1b8d3e9f0a1b2c3d4e',
+            ],
         ];
     }
 
     /**
-     * A CATEGORICAL score including trace field-group data, as returned in a list.
+     * A CATEGORICAL score on an experiment: the string lands in `value`.
      *
      * @return array<string, mixed>
      */
@@ -43,8 +48,7 @@ class ScoreFixtures
     {
         return [
             'id' => 'score-cat',
-            'traceId' => 'trace-456',
-            'datasetRunId' => 'run-789',
+            'projectId' => 'project-1',
             'name' => 'sentiment',
             'source' => 'EVAL',
             'timestamp' => '2024-05-02T08:30:00.000Z',
@@ -53,19 +57,43 @@ class ScoreFixtures
             'metadata' => [],
             'environment' => 'production',
             'dataType' => 'CATEGORICAL',
-            'value' => 1,
-            'stringValue' => 'positive',
-            'trace' => [
-                'userId' => 'user-1',
-                'tags' => ['prod', 'v2'],
-                'environment' => 'production',
-                'sessionId' => 'sess-1',
+            'value' => 'positive',
+            'subject' => [
+                'kind' => 'experiment',
+                'id' => 'experiment-789',
             ],
         ];
     }
 
     /**
-     * A paginated GetScoresResponse with two scores.
+     * A BOOLEAN score on a trace: `value` is a real boolean in v3.
+     *
+     * @return array<string, mixed>
+     */
+    public static function booleanScore(): array
+    {
+        return [
+            'id' => 'score-bool',
+            'projectId' => 'project-1',
+            'name' => 'is_correct',
+            'source' => 'ANNOTATION',
+            'timestamp' => '2024-05-03T09:00:00.000Z',
+            'createdAt' => '2024-05-03T09:00:01.000Z',
+            'updatedAt' => '2024-05-03T09:00:01.000Z',
+            'environment' => 'production',
+            'dataType' => 'BOOLEAN',
+            'value' => true,
+            'authorUserId' => 'user-9',
+            'queueId' => 'queue-1',
+            'subject' => [
+                'kind' => 'trace',
+                'id' => '0192f1b42c7e7a1b8d3e9f0a1b2c3d4e',
+            ],
+        ];
+    }
+
+    /**
+     * A cursor-paginated GetScoresResponse.
      *
      * @return array<string, mixed>
      */
@@ -77,11 +105,22 @@ class ScoreFixtures
                 self::categoricalScore(),
             ],
             'meta' => [
-                'totalItems' => 2,
-                'totalPages' => 1,
-                'page' => 1,
                 'limit' => 50,
+                'cursor' => 'eyJpZCI6InNjb3JlLWNhdCJ9',
             ],
+        ];
+    }
+
+    /**
+     * The last page: no cursor.
+     *
+     * @return array<string, mixed>
+     */
+    public static function lastScorePage(): array
+    {
+        return [
+            'data' => [self::booleanScore()],
+            'meta' => ['limit' => 50],
         ];
     }
 }

@@ -6,19 +6,24 @@ use Axyr\Langfuse\Contracts\EventBatcherInterface;
 use Axyr\Langfuse\Contracts\TraceContextResolverInterface;
 use Axyr\Langfuse\Dto\TraceBody;
 use Axyr\Langfuse\LangfuseFacade;
-use Axyr\Langfuse\Testing\RecordingEventBatcher;
+use Axyr\Langfuse\Objects\LangfuseTrace;
 use Axyr\Langfuse\Tracing\AuthTraceContextResolver;
 use Illuminate\Auth\GenericUser;
 use Illuminate\Support\Facades\Log;
 
-function recordTraces(): RecordingEventBatcher
+function recordTraces(): void
 {
     config(['langfuse.public_key' => 'pk', 'langfuse.secret_key' => 'sk']);
 
-    $batcher = new RecordingEventBatcher();
-    app()->instance(EventBatcherInterface::class, $batcher);
+    app()->instance(EventBatcherInterface::class, new \Axyr\Langfuse\Batch\NullEventBatcher());
+}
 
-    return $batcher;
+/**
+ * @return array<string, mixed>
+ */
+function traceBodyOf(LangfuseTrace $trace): array
+{
+    return $trace->getBody()->toArray();
 }
 
 it('binds the auth resolver as the default', function () {
@@ -27,24 +32,20 @@ it('binds the auth resolver as the default', function () {
 });
 
 it('tags traces with the authenticated user', function () {
-    $batcher = recordTraces();
+    recordTraces();
     $this->actingAs(new GenericUser(['id' => 42]));
 
-    LangfuseFacade::trace(new TraceBody(id: 'trace-1'));
-
-    expect($batcher->events()[0]->toArray()['body']['userId'])->toBe('42');
+    expect(traceBodyOf(LangfuseFacade::trace(new TraceBody(id: 'trace-1')))['userId'])->toBe('42');
 });
 
 it('leaves guests without a userId', function () {
-    $batcher = recordTraces();
+    recordTraces();
 
-    LangfuseFacade::trace(new TraceBody(id: 'trace-1'));
-
-    expect($batcher->events()[0]->toArray()['body'])->not->toHaveKey('userId');
+    expect(traceBodyOf(LangfuseFacade::trace(new TraceBody(id: 'trace-1'))))->not->toHaveKey('userId');
 });
 
 it('uses a custom resolver bound by the application', function () {
-    $batcher = recordTraces();
+    recordTraces();
     $this->app->instance(TraceContextResolverInterface::class, new class () implements TraceContextResolverInterface {
         public function resolveUserId(): ?string
         {
@@ -57,16 +58,14 @@ it('uses a custom resolver bound by the application', function () {
         }
     });
 
-    LangfuseFacade::trace(new TraceBody(id: 'trace-1'));
-
-    $body = $batcher->events()[0]->toArray()['body'];
+    $body = traceBodyOf(LangfuseFacade::trace(new TraceBody(id: 'trace-1')));
 
     expect($body['userId'])->toBe('tenant-7:user-3')
         ->and($body['sessionId'])->toBe('ticket-9');
 });
 
 it('still creates the trace when the resolver throws', function () {
-    $batcher = recordTraces();
+    recordTraces();
     $this->app->instance(TraceContextResolverInterface::class, new class () implements TraceContextResolverInterface {
         public function resolveUserId(): ?string
         {
@@ -80,20 +79,18 @@ it('still creates the trace when the resolver throws', function () {
     });
     Log::shouldReceive('warning')->once()->with('Langfuse trace context resolution failed', ['message' => 'guard exploded']);
 
-    LangfuseFacade::trace(new TraceBody(id: 'trace-1'));
+    $trace = LangfuseFacade::trace(new TraceBody(id: 'trace-1'));
 
-    expect($batcher->events())->toHaveCount(1)
-        ->and($batcher->events()[0]->toArray()['body'])->not->toHaveKey('userId');
+    expect($trace->getId())->toBe(\Axyr\Langfuse\Dto\IdGenerator::traceIdFromSeed('trace-1'))
+        ->and(traceBodyOf($trace))->not->toHaveKey('userId');
 });
 
 it('respects the user tracing switch', function () {
     config(['langfuse.user_tracing' => false]);
     $this->app->forgetInstance(\Axyr\Langfuse\Config\LangfuseConfig::class);
     $this->app->forgetInstance(\Axyr\Langfuse\Contracts\LangfuseClientInterface::class);
-    $batcher = recordTraces();
+    recordTraces();
     $this->actingAs(new GenericUser(['id' => 42]));
 
-    LangfuseFacade::trace(new TraceBody(id: 'trace-1'));
-
-    expect($batcher->events()[0]->toArray()['body'])->not->toHaveKey('userId');
+    expect(traceBodyOf(LangfuseFacade::trace(new TraceBody(id: 'trace-1'))))->not->toHaveKey('userId');
 });

@@ -62,3 +62,16 @@ it('score is a no-op', function () {
 
     expect($trace->getId())->toBe('');
 });
+
+it('returns an empty root observation id', function () {
+    expect((new NullLangfuseTrace())->getRootObservationId())->toBe('');
+});
+
+it('end and endOnShutdown are no-ops and it always reports as ended', function () {
+    $trace = new NullLangfuseTrace();
+
+    $trace->end(output: 'done');
+    $trace->endOnShutdown();
+
+    expect($trace->hasEnded())->toBeTrue();
+});

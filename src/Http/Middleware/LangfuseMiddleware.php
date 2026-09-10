@@ -35,6 +35,14 @@ class LangfuseMiddleware
 
         $this->langfuse->setCurrentTrace($trace);
 
-        return $next($request);
+        /** @var Response $response */
+        $response = $next($request);
+
+        // The root observation is only exported once it ends. Ending it here
+        // captures the handler; the terminate hook is the safety net for work
+        // that happens after the response is sent.
+        $trace->end(output: ['status' => $response->getStatusCode()]);
+
+        return $response;
     }
 }

@@ -192,17 +192,6 @@ it('defaults queue to null for empty string', function () {
     expect($config->queue)->toBeNull();
 });
 
-it('generates batch metadata', function () {
-    $config = new LangfuseConfig(publicKey: 'pk-meta', secretKey: 'sk');
-
-    expect($config->batchMetadata(5))->toBe([
-        'batch_size' => 5,
-        'sdk_name' => 'langfuse-php',
-        'sdk_version' => '2.1.0',
-        'public_key' => 'pk-meta',
-    ]);
-});
-
 it('generates correct prompts list url', function () {
     $config = new LangfuseConfig(publicKey: 'pk', secretKey: 'sk');
 
@@ -285,4 +274,85 @@ it('parses user_tracing and session_tracing from array', function () {
 
     expect($config->userTracingEnabled)->toBeFalse()
         ->and($config->sessionTracingEnabled)->toBeFalse();
+});
+
+it('generates the otlp traces url', function () {
+    $config = new LangfuseConfig(publicKey: 'pk', secretKey: 'sk');
+
+    expect($config->otelTracesUrl())->toBe('https://cloud.langfuse.com/api/public/otel/v1/traces');
+});
+
+it('strips a trailing slash from the base url in the otlp traces url', function () {
+    $config = new LangfuseConfig(publicKey: 'pk', secretKey: 'sk', baseUrl: 'https://cloud.langfuse.com/');
+
+    expect($config->otelTracesUrl())->toBe('https://cloud.langfuse.com/api/public/otel/v1/traces');
+});
+
+it('generates the v3 scores url', function () {
+    $config = new LangfuseConfig(publicKey: 'pk', secretKey: 'sk');
+
+    expect($config->scoresV3Url())->toBe('https://cloud.langfuse.com/api/public/v3/scores');
+});
+
+it('generates the v2 observations url', function () {
+    $config = new LangfuseConfig(publicKey: 'pk', secretKey: 'sk');
+
+    expect($config->observationsV2Url())->toBe('https://cloud.langfuse.com/api/public/v2/observations');
+});
+
+it('generates the v2 metrics url', function () {
+    $config = new LangfuseConfig(publicKey: 'pk', secretKey: 'sk');
+
+    expect($config->metricsV2Url())->toBe('https://cloud.langfuse.com/api/public/v2/metrics');
+});
+
+it('generates the experiment urls', function () {
+    $config = new LangfuseConfig(publicKey: 'pk', secretKey: 'sk');
+
+    expect($config->experimentsUrl())->toBe('https://cloud.langfuse.com/api/public/experiments')
+        ->and($config->experimentItemsUrl())->toBe('https://cloud.langfuse.com/api/public/experiment-items');
+});
+
+it('generates the dataset urls', function () {
+    $config = new LangfuseConfig(publicKey: 'pk', secretKey: 'sk');
+
+    expect($config->datasetsUrl())->toBe('https://cloud.langfuse.com/api/public/v2/datasets')
+        ->and($config->datasetsUrl('my set'))->toBe('https://cloud.langfuse.com/api/public/v2/datasets/my+set')
+        ->and($config->datasetItemsUrl())->toBe('https://cloud.langfuse.com/api/public/dataset-items')
+        ->and($config->datasetItemsUrl('item-1'))->toBe('https://cloud.langfuse.com/api/public/dataset-items/item-1');
+});
+
+it('no longer builds the deprecated v1 and v2 read urls', function () {
+    $config = new LangfuseConfig(publicKey: 'pk', secretKey: 'sk');
+
+    expect(method_exists($config, 'observationsUrl'))->toBeFalse()
+        ->and(method_exists($config, 'metricsUrl'))->toBeFalse()
+        ->and(method_exists($config, 'scoresV2Url'))->toBeFalse()
+        ->and(method_exists($config, 'datasetRunsUrl'))->toBeFalse()
+        ->and(method_exists($config, 'datasetRunItemsUrl'))->toBeFalse()
+        ->and(method_exists($config, 'batchMetadata'))->toBeFalse();
+});
+
+it('has defaults for the new v4 keys', function () {
+    $config = new LangfuseConfig(publicKey: 'pk', secretKey: 'sk');
+
+    expect($config->serviceName)->toBe('laravel')
+        ->and($config->compression)->toBeFalse()
+        ->and($config->release)->toBeNull();
+});
+
+it('reads the new v4 keys from array', function () {
+    $config = LangfuseConfig::fromArray([
+        'service_name' => 'checkout-api',
+        'compression' => 'true',
+        'release' => '1.2.3',
+    ]);
+
+    expect($config->serviceName)->toBe('checkout-api')
+        ->and($config->compression)->toBeTrue()
+        ->and($config->release)->toBe('1.2.3');
+});
+
+it('defaults the release to null for an empty string', function () {
+    expect(LangfuseConfig::fromArray(['release' => ''])->release)->toBeNull();
 });

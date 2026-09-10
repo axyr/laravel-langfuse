@@ -2,20 +2,18 @@
 
 declare(strict_types=1);
 
-use Axyr\Langfuse\Cache\PromptCache;
 use Axyr\Langfuse\Config\LangfuseConfig;
 use Axyr\Langfuse\Contracts\LangfuseClientInterface;
-use Axyr\Langfuse\Contracts\PromptApiClientInterface;
-use Axyr\Langfuse\Contracts\ScoreApiClientInterface;
-use Axyr\Langfuse\Dto\IngestionEvent;
 use Axyr\Langfuse\Dto\TextPrompt;
 use Axyr\Langfuse\Dto\TraceBody;
-use Axyr\Langfuse\LangfuseClient;
+use Axyr\Langfuse\Enums\ObservationType;
 use Axyr\Langfuse\LaravelAi\LaravelAiSubscriber;
+use Axyr\Langfuse\Objects\LangfuseGeneration;
+use Axyr\Langfuse\Objects\LangfuseSpan;
+use Axyr\Langfuse\Objects\LangfuseTrace;
 use Axyr\Langfuse\Objects\NullLangfuseTrace;
 use Axyr\Langfuse\Prompt\CurrentPromptRegistry;
-use Axyr\Langfuse\Prompt\PromptManager;
-use Axyr\Langfuse\Testing\RecordingEventBatcher;
+use Axyr\Langfuse\Testing\LangfuseFake;
 use Illuminate\Auth\GenericUser;
 use Laravel\Ai\Concerns\RemembersConversations as RemembersConversationsTrait;
 use Laravel\Ai\Contracts\Agent;
@@ -34,31 +32,12 @@ use Laravel\Ai\Responses\Data\Meta;
 use Laravel\Ai\Responses\Data\Usage;
 use Laravel\Ai\Responses\StreamedAgentResponse;
 
-function makeLangfuseClient(): array
+function makeLangfuseClient(): LangfuseFake
 {
-    $batcher = new RecordingEventBatcher();
-
-    $config = new LangfuseConfig(publicKey: 'pk', secretKey: 'sk');
-    $promptApiClient = Mockery::mock(PromptApiClientInterface::class);
-    $promptManager = new PromptManager(
-        $promptApiClient,
-        new PromptCache(),
+    return new LangfuseFake(
+        new CurrentPromptRegistry(),
+        new LangfuseConfig(publicKey: 'pk', secretKey: 'sk'),
     );
-
-    $client = new LangfuseClient(
-        $batcher,
-        $config,
-        $promptManager,
-        Mockery::mock(ScoreApiClientInterface::class),
-        $promptApiClient,
-        Mockery::mock(\Axyr\Langfuse\Contracts\ObservationApiClientInterface::class),
-        Mockery::mock(\Axyr\Langfuse\Contracts\MetricsApiClientInterface::class),
-        Mockery::mock(\Axyr\Langfuse\Contracts\DatasetApiClientInterface::class),
-        Mockery::mock(\Axyr\Langfuse\Contracts\DatasetItemApiClientInterface::class),
-        Mockery::mock(\Axyr\Langfuse\Contracts\DatasetRunApiClientInterface::class),
-    );
-
-    return [$client, $batcher];
 }
 
 function makeSubscriber(
@@ -71,6 +50,30 @@ function makeSubscriber(
         $config ?? new LangfuseConfig(publicKey: 'pk', secretKey: 'sk'),
         $registry ?? new CurrentPromptRegistry(),
     );
+}
+
+/**
+ * @return array<int, array<string, mixed>>
+ */
+function traceBodies(LangfuseFake $fake): array
+{
+    return array_map(fn(LangfuseTrace $trace): array => $trace->getBody()->toArray(), $fake->traces());
+}
+
+/**
+ * @return array<int, array<string, mixed>>
+ */
+function generationBodies(LangfuseFake $fake): array
+{
+    return array_map(fn(LangfuseGeneration $g): array => $g->getBody()->toArray(), $fake->generations());
+}
+
+/**
+ * @return array<int, array<string, mixed>>
+ */
+function spanBodies(LangfuseFake $fake): array
+{
+    return array_map(fn(LangfuseSpan $s): array => $s->getBody()->toArray(), $fake->spans());
 }
 
 function makeAgentPrompt(string $model = 'gpt-4', ?Agent $agent = null): AgentPrompt
@@ -114,15 +117,23 @@ function makeTestTool(): Tool
     return new class () implements Tool {};
 }
 
+function runAgentInvocation(LaravelAiSubscriber $subscriber, string $invocationId): void
+{
+    $prompt = makeAgentPrompt();
+    $subscriber->handlePromptingAgent(new PromptingAgent(invocationId: $invocationId, prompt: $prompt));
+    $subscriber->handleAgentPrompted(new AgentPrompted(
+        invocationId: $invocationId,
+        prompt: $prompt,
+        response: makeAgentResponse(invocationId: $invocationId),
+    ));
+}
+
 it('registers correct event mappings in subscribe', function () {
-    [$client] = makeLangfuseClient();
-    $subscriber = makeSubscriber($client);
+    $subscriber = makeSubscriber(makeLangfuseClient());
 
     $dispatcher = Mockery::mock(\Illuminate\Events\Dispatcher::class);
 
-    $result = $subscriber->subscribe($dispatcher);
-
-    expect($result)->toBe([
+    expect($subscriber->subscribe($dispatcher))->toBe([
         PromptingAgent::class => 'handlePromptingAgent',
         StreamingAgent::class => 'handlePromptingAgent',
         AgentPrompted::class => 'handleAgentPrompted',
@@ -132,52 +143,50 @@ it('registers correct event mappings in subscribe', function () {
     ]);
 });
 
-it('creates trace and generation on agent prompt', function () {
-    [$client, $batcher] = makeLangfuseClient();
-    $subscriber = makeSubscriber($client);
-
+it('creates a trace and a generation, and ends both, on agent prompt', function () {
+    $fake = makeLangfuseClient();
+    $subscriber = makeSubscriber($fake);
     $prompt = makeAgentPrompt();
 
-    $subscriber->handlePromptingAgent(new PromptingAgent(
-        invocationId: 'inv-1',
-        prompt: $prompt,
-    ));
-
+    $subscriber->handlePromptingAgent(new PromptingAgent(invocationId: 'inv-1', prompt: $prompt));
     $subscriber->handleAgentPrompted(new AgentPrompted(
         invocationId: 'inv-1',
         prompt: $prompt,
         response: makeAgentResponse(),
     ));
 
-    expect($batcher->events())->toHaveCount(4); // trace-create, generation-create, generation-update, trace output update
+    $fake->assertTraceCreated()
+        ->assertTraceEnded()
+        ->assertGenerationCreated()
+        ->assertGenerationEnded()
+        ->assertEventCount(2);
+});
 
-    $types = array_map(fn(IngestionEvent $e) => $e->type->value, $batcher->events());
-    expect($types)->toContain('trace-create')
-        ->and($types)->toContain('generation-create')
-        ->and($types)->toContain('generation-update');
+it('nests the generation under the root observation of the trace', function () {
+    $fake = makeLangfuseClient();
+    $subscriber = makeSubscriber($fake);
+
+    runAgentInvocation($subscriber, 'inv-1');
+
+    $trace = $fake->traces()[0];
+
+    expect($fake->generations()[0]->getBody()->parentObservationId)->toBe($trace->getRootObservationId())
+        ->and($fake->generations()[0]->getBody()->traceId)->toBe($trace->getId());
 });
 
 it('captures usage data in generation', function () {
-    [$client, $batcher] = makeLangfuseClient();
-    $subscriber = makeSubscriber($client);
-
+    $fake = makeLangfuseClient();
+    $subscriber = makeSubscriber($fake);
     $prompt = makeAgentPrompt();
 
-    $subscriber->handlePromptingAgent(new PromptingAgent(
-        invocationId: 'inv-1',
-        prompt: $prompt,
-    ));
-
+    $subscriber->handlePromptingAgent(new PromptingAgent(invocationId: 'inv-1', prompt: $prompt));
     $subscriber->handleAgentPrompted(new AgentPrompted(
         invocationId: 'inv-1',
         prompt: $prompt,
         response: makeAgentResponse(promptTokens: 15, completionTokens: 25),
     ));
 
-    $updateEvent = collect($batcher->events())->first(
-        fn(IngestionEvent $e) => $e->type->value === 'generation-update',
-    );
-    $body = $updateEvent->body->toArray();
+    $body = generationBodies($fake)[0];
 
     expect($body)->toHaveKey('usage')
         ->and($body['usage']['input'])->toBe(15)
@@ -186,80 +195,49 @@ it('captures usage data in generation', function () {
 });
 
 it('captures model name from response meta', function () {
-    [$client, $batcher] = makeLangfuseClient();
-    $subscriber = makeSubscriber($client);
-
+    $fake = makeLangfuseClient();
+    $subscriber = makeSubscriber($fake);
     $prompt = makeAgentPrompt('gpt-4');
 
-    $subscriber->handlePromptingAgent(new PromptingAgent(
-        invocationId: 'inv-1',
-        prompt: $prompt,
-    ));
-
+    $subscriber->handlePromptingAgent(new PromptingAgent(invocationId: 'inv-1', prompt: $prompt));
     $subscriber->handleAgentPrompted(new AgentPrompted(
         invocationId: 'inv-1',
         prompt: $prompt,
         response: makeAgentResponse(model: 'gpt-4-turbo'),
     ));
 
-    $createEvent = collect($batcher->events())->first(
-        fn(IngestionEvent $e) => $e->type->value === 'generation-create',
-    );
-    $body = $createEvent->body->toArray();
-
-    expect($body['model'])->toBe('gpt-4-turbo');
+    expect(generationBodies($fake)[0]['model'])->toBe('gpt-4-turbo');
 });
 
 it('creates trace with agent class name', function () {
-    [$client, $batcher] = makeLangfuseClient();
-    $subscriber = makeSubscriber($client);
+    $fake = makeLangfuseClient();
+    $subscriber = makeSubscriber($fake);
 
-    $prompt = makeAgentPrompt();
+    $subscriber->handlePromptingAgent(new PromptingAgent(invocationId: 'inv-1', prompt: makeAgentPrompt()));
 
-    $subscriber->handlePromptingAgent(new PromptingAgent(
-        invocationId: 'inv-1',
-        prompt: $prompt,
-    ));
-
-    $traceEvent = collect($batcher->events())->first(
-        fn(IngestionEvent $e) => $e->type->value === 'trace-create',
-    );
-    $body = $traceEvent->body->toArray();
-
-    // Anonymous class gets a generated name, but it should start with 'laravel-ai-'
-    expect($body['name'])->toStartWith('laravel-ai-');
+    expect(traceBodies($fake)[0]['name'])->toStartWith('laravel-ai-');
 });
 
 it('creates trace with correct metadata', function () {
-    [$client, $batcher] = makeLangfuseClient();
-    $subscriber = makeSubscriber($client);
-
-    $prompt = makeAgentPrompt('claude-3-opus');
+    $fake = makeLangfuseClient();
+    $subscriber = makeSubscriber($fake);
 
     $subscriber->handlePromptingAgent(new PromptingAgent(
         invocationId: 'inv-1',
-        prompt: $prompt,
+        prompt: makeAgentPrompt('claude-3-opus'),
     ));
 
-    $traceEvent = collect($batcher->events())->first(
-        fn(IngestionEvent $e) => $e->type->value === 'trace-create',
-    );
-    $body = $traceEvent->body->toArray();
+    $body = traceBodies($fake)[0];
 
     expect($body['metadata']['model'])->toBe('claude-3-opus')
         ->and($body['metadata']['source'])->toBe('laravel-ai-auto-instrumentation');
 });
 
-it('creates span for tool invocation', function () {
-    [$client, $batcher] = makeLangfuseClient();
-    $subscriber = makeSubscriber($client);
+it('creates and ends a span for a tool invocation', function () {
+    $fake = makeLangfuseClient();
+    $subscriber = makeSubscriber($fake);
 
-    // First create a trace via agent prompt
-    $prompt = makeAgentPrompt();
-    $subscriber->handlePromptingAgent(new PromptingAgent(
-        invocationId: 'inv-1',
-        prompt: $prompt,
-    ));
+    $subscriber->handlePromptingAgent(new PromptingAgent(invocationId: 'inv-1', prompt: makeAgentPrompt()));
 
     $agent = makeTestAgent();
     $tool = makeTestTool();
@@ -281,89 +259,60 @@ it('creates span for tool invocation', function () {
         result: 'Tool result',
     ));
 
-    $spanCreateEvents = collect($batcher->events())->filter(
-        fn(IngestionEvent $e) => $e->type->value === 'span-create',
-    );
-    $spanUpdateEvents = collect($batcher->events())->filter(
-        fn(IngestionEvent $e) => $e->type->value === 'span-update',
-    );
+    expect($fake->spans())->toHaveCount(1);
 
-    expect($spanCreateEvents)->toHaveCount(1)
-        ->and($spanUpdateEvents)->toHaveCount(1);
+    $body = spanBodies($fake)[0];
 
-    $spanBody = $spanCreateEvents->first()->body->toArray();
-    expect($spanBody['name'])->toStartWith('tool-')
-        ->and($spanBody['input'])->toBe(['query' => 'test']);
-
-    $spanUpdateBody = $spanUpdateEvents->first()->body->toArray();
-    expect($spanUpdateBody['output'])->toBe('Tool result');
+    expect($body['name'])->toStartWith('tool-')
+        ->and($body['input'])->toBe(['query' => 'test'])
+        ->and($body['output'])->toBe('Tool result')
+        ->and($body['type'])->toBe('tool')
+        ->and($fake->spans()[0]->hasEnded())->toBeTrue();
 });
 
-it('reuses existing trace across multiple prompts', function () {
-    [$client, $batcher] = makeLangfuseClient();
-    $subscriber = makeSubscriber($client);
+it('ends the owned trace, so the next invocation starts a new one', function () {
+    $fake = makeLangfuseClient();
+    $subscriber = makeSubscriber($fake);
 
-    $prompt = makeAgentPrompt();
+    runAgentInvocation($subscriber, 'inv-1');
+    runAgentInvocation($subscriber, 'inv-2');
 
-    // First prompt
-    $subscriber->handlePromptingAgent(new PromptingAgent(invocationId: 'inv-1', prompt: $prompt));
-    $subscriber->handleAgentPrompted(new AgentPrompted(
-        invocationId: 'inv-1',
-        prompt: $prompt,
-        response: makeAgentResponse(invocationId: 'inv-1'),
-    ));
+    expect($fake->traces())->toHaveCount(2)
+        ->and($fake->generations())->toHaveCount(2)
+        ->and($fake->traces()[0]->hasEnded())->toBeTrue()
+        ->and($fake->traces()[1]->hasEnded())->toBeTrue()
+        ->and($fake->generations()[0]->getBody()->traceId)->toBe($fake->traces()[0]->getId())
+        ->and($fake->generations()[1]->getBody()->traceId)->toBe($fake->traces()[1]->getId());
+});
 
-    // Second prompt (same invocation ID pattern, but the trace is set as current)
-    $subscriber->handlePromptingAgent(new PromptingAgent(invocationId: 'inv-2', prompt: $prompt));
-    $subscriber->handleAgentPrompted(new AgentPrompted(
-        invocationId: 'inv-2',
-        prompt: $prompt,
-        response: makeAgentResponse(invocationId: 'inv-2'),
-    ));
+it('resets the current trace once the owned invocation is done', function () {
+    $fake = makeLangfuseClient();
+    $subscriber = makeSubscriber($fake);
 
-    $traceEvents = collect($batcher->events())->filter(
-        fn(IngestionEvent $e) => $e->type->value === 'trace-create',
-    );
-    $generationEvents = collect($batcher->events())->filter(
-        fn(IngestionEvent $e) => $e->type->value === 'generation-create',
-    );
+    $subscriber->handlePromptingAgent(new PromptingAgent(invocationId: 'inv-1', prompt: makeAgentPrompt()));
 
-    // 1 trace created plus its output update, and 2 generations
-    expect($traceEvents)->toHaveCount(2)
-        ->and($generationEvents)->toHaveCount(2);
+    expect($fake->currentTrace())->not->toBeInstanceOf(NullLangfuseTrace::class);
 
-    // Both generations reference the same trace
-    $traceId = $traceEvents->first()->body->toArray()['id'];
-    $genTraceIds = $generationEvents->map(fn(IngestionEvent $e) => $e->body->toArray()['traceId'])->all();
+    runAgentInvocation($subscriber, 'inv-1');
 
-    expect($genTraceIds)->each->toBe($traceId);
+    expect($fake->currentTrace())->toBeInstanceOf(NullLangfuseTrace::class);
 });
 
 it('sets current trace on langfuse client', function () {
-    [$client, $batcher] = makeLangfuseClient();
-    $subscriber = makeSubscriber($client);
+    $fake = makeLangfuseClient();
+    $subscriber = makeSubscriber($fake);
 
-    $prompt = makeAgentPrompt();
+    $subscriber->handlePromptingAgent(new PromptingAgent(invocationId: 'inv-1', prompt: makeAgentPrompt()));
 
-    $subscriber->handlePromptingAgent(new PromptingAgent(
-        invocationId: 'inv-1',
-        prompt: $prompt,
-    ));
-
-    expect($client->currentTrace())->not->toBeInstanceOf(NullLangfuseTrace::class);
+    expect($fake->currentTrace())->not->toBeInstanceOf(NullLangfuseTrace::class);
 });
 
 it('handles streaming events same as non-streaming', function () {
-    [$client, $batcher] = makeLangfuseClient();
-    $subscriber = makeSubscriber($client);
-
+    $fake = makeLangfuseClient();
+    $subscriber = makeSubscriber($fake);
     $prompt = makeAgentPrompt();
 
-    $subscriber->handlePromptingAgent(new StreamingAgent(
-        invocationId: 'inv-1',
-        prompt: $prompt,
-    ));
-
+    $subscriber->handlePromptingAgent(new StreamingAgent(invocationId: 'inv-1', prompt: $prompt));
     $subscriber->handleAgentPrompted(new AgentStreamed(
         invocationId: 'inv-1',
         prompt: $prompt,
@@ -375,12 +324,9 @@ it('handles streaming events same as non-streaming', function () {
         ),
     ));
 
-    expect($batcher->events())->toHaveCount(4);
+    $fake->assertEventCount(2);
 
-    $updateEvent = collect($batcher->events())->first(
-        fn(IngestionEvent $e) => $e->type->value === 'generation-update',
-    );
-    $body = $updateEvent->body->toArray();
+    $body = generationBodies($fake)[0];
 
     expect($body['output'])->toBe('Streamed response')
         ->and($body['usage']['input'])->toBe(5)
@@ -388,8 +334,8 @@ it('handles streaming events same as non-streaming', function () {
 });
 
 it('handles tool invoked without prior invoking tool gracefully', function () {
-    [$client, $batcher] = makeLangfuseClient();
-    $subscriber = makeSubscriber($client);
+    $fake = makeLangfuseClient();
+    $subscriber = makeSubscriber($fake);
 
     $subscriber->handleToolInvoked(new ToolInvoked(
         invocationId: 'inv-1',
@@ -400,119 +346,59 @@ it('handles tool invoked without prior invoking tool gracefully', function () {
         result: 'result',
     ));
 
-    // No span events should be created since we never called handleInvokingTool
-    $spanEvents = collect($batcher->events())->filter(
-        fn(IngestionEvent $e) => str_contains($e->type->value, 'span'),
-    );
-
-    expect($spanEvents)->toBeEmpty();
+    expect($fake->spans())->toBeEmpty();
 });
 
 it('falls back to prompt model when response meta model is null', function () {
-    [$client, $batcher] = makeLangfuseClient();
-    $subscriber = makeSubscriber($client);
-
+    $fake = makeLangfuseClient();
+    $subscriber = makeSubscriber($fake);
     $prompt = makeAgentPrompt('claude-3-sonnet');
 
-    $subscriber->handlePromptingAgent(new PromptingAgent(
-        invocationId: 'inv-1',
-        prompt: $prompt,
-    ));
-
+    $subscriber->handlePromptingAgent(new PromptingAgent(invocationId: 'inv-1', prompt: $prompt));
     $subscriber->handleAgentPrompted(new AgentPrompted(
         invocationId: 'inv-1',
         prompt: $prompt,
         response: makeAgentResponse(model: null),
     ));
 
-    $createEvent = collect($batcher->events())->first(
-        fn(IngestionEvent $e) => $e->type->value === 'generation-create',
-    );
-    $body = $createEvent->body->toArray();
-
-    expect($body['model'])->toBe('claude-3-sonnet');
+    expect(generationBodies($fake)[0]['model'])->toBe('claude-3-sonnet');
 });
 
 it('captures prompt text as generation input', function () {
-    [$client, $batcher] = makeLangfuseClient();
-    $subscriber = makeSubscriber($client);
+    $fake = makeLangfuseClient();
+    $subscriber = makeSubscriber($fake);
 
-    $prompt = makeAgentPrompt();
+    runAgentInvocation($subscriber, 'inv-1');
 
-    $subscriber->handlePromptingAgent(new PromptingAgent(
-        invocationId: 'inv-1',
-        prompt: $prompt,
-    ));
-
-    $subscriber->handleAgentPrompted(new AgentPrompted(
-        invocationId: 'inv-1',
-        prompt: $prompt,
-        response: makeAgentResponse(),
-    ));
-
-    $createEvent = collect($batcher->events())->first(
-        fn(IngestionEvent $e) => $e->type->value === 'generation-create',
-    );
-    $body = $createEvent->body->toArray();
-
-    expect($body['input'])->toBe('Tell me a joke');
+    expect(generationBodies($fake)[0]['input'])->toBe('Tell me a joke');
 });
 
 it('captures response text as generation output', function () {
-    [$client, $batcher] = makeLangfuseClient();
-    $subscriber = makeSubscriber($client);
-
+    $fake = makeLangfuseClient();
+    $subscriber = makeSubscriber($fake);
     $prompt = makeAgentPrompt();
 
-    $subscriber->handlePromptingAgent(new PromptingAgent(
-        invocationId: 'inv-1',
-        prompt: $prompt,
-    ));
-
+    $subscriber->handlePromptingAgent(new PromptingAgent(invocationId: 'inv-1', prompt: $prompt));
     $subscriber->handleAgentPrompted(new AgentPrompted(
         invocationId: 'inv-1',
         prompt: $prompt,
         response: makeAgentResponse(text: 'Why did the chicken cross the road?'),
     ));
 
-    $updateEvent = collect($batcher->events())->first(
-        fn(IngestionEvent $e) => $e->type->value === 'generation-update',
-    );
-    $body = $updateEvent->body->toArray();
-
-    expect($body['output'])->toBe('Why did the chicken cross the road?');
+    expect(generationBodies($fake)[0]['output'])->toBe('Why did the chicken cross the road?');
 });
 
-function generationCreateBodies(RecordingEventBatcher $batcher): array
-{
-    return array_map(
-        fn(IngestionEvent $event): array => $event->toArray()['body'],
-        $batcher->eventsOfType('generation-create'),
-    );
-}
-
-function runAgentInvocation(LaravelAiSubscriber $subscriber, string $invocationId): void
-{
-    $prompt = makeAgentPrompt();
-    $subscriber->handlePromptingAgent(new PromptingAgent(invocationId: $invocationId, prompt: $prompt));
-    $subscriber->handleAgentPrompted(new AgentPrompted(
-        invocationId: $invocationId,
-        prompt: $prompt,
-        response: makeAgentResponse(invocationId: $invocationId),
-    ));
-}
-
 it('links the registered managed prompt to the generation and consumes it', function () {
-    [$client, $batcher] = makeLangfuseClient();
+    $fake = makeLangfuseClient();
     $registry = new CurrentPromptRegistry();
-    $subscriber = makeSubscriber($client, registry: $registry);
+    $subscriber = makeSubscriber($fake, registry: $registry);
 
     $registry->set(new TextPrompt(name: 'movie-critic', version: 7, prompt: 'text'));
 
     runAgentInvocation($subscriber, 'inv-1');
     runAgentInvocation($subscriber, 'inv-2');
 
-    [$first, $second] = generationCreateBodies($batcher);
+    [$first, $second] = generationBodies($fake);
 
     expect($first['promptName'])->toBe('movie-critic')
         ->and($first['promptVersion'])->toBe(7)
@@ -521,9 +407,9 @@ it('links the registered managed prompt to the generation and consumes it', func
 });
 
 it('keeps the prompt captured at invocation start when a nested prompt is resolved during the run', function () {
-    [$client, $batcher] = makeLangfuseClient();
+    $fake = makeLangfuseClient();
     $registry = new CurrentPromptRegistry();
-    $subscriber = makeSubscriber($client, registry: $registry);
+    $subscriber = makeSubscriber($fake, registry: $registry);
     $prompt = makeAgentPrompt();
 
     $registry->set(new TextPrompt(name: 'movie-critic', version: 7, prompt: 'text'));
@@ -539,7 +425,7 @@ it('keeps the prompt captured at invocation start when a nested prompt is resolv
         response: makeAgentResponse(invocationId: 'outer'),
     ));
 
-    [$nested, $outer] = generationCreateBodies($batcher);
+    [$nested, $outer] = generationBodies($fake);
 
     expect($nested['promptName'])->toBe('summarizer')
         ->and($nested['promptVersion'])->toBe(2)
@@ -548,9 +434,9 @@ it('keeps the prompt captured at invocation start when a nested prompt is resolv
 });
 
 it('does not leak a prompt from a failed invocation into the next generation', function () {
-    [$client, $batcher] = makeLangfuseClient();
+    $fake = makeLangfuseClient();
     $registry = new CurrentPromptRegistry();
-    $subscriber = makeSubscriber($client, registry: $registry);
+    $subscriber = makeSubscriber($fake, registry: $registry);
 
     $registry->set(new TextPrompt(name: 'movie-critic', version: 7, prompt: 'text'));
     // The provider throws after PromptingAgent, so AgentPrompted never fires for inv-1.
@@ -558,19 +444,11 @@ it('does not leak a prompt from a failed invocation into the next generation', f
 
     runAgentInvocation($subscriber, 'inv-2');
 
-    [$body] = generationCreateBodies($batcher);
+    [$body] = generationBodies($fake);
 
     expect($body)->not->toHaveKey('promptName')
         ->and($registry->current())->toBeNull();
 });
-
-function traceCreateBodies(RecordingEventBatcher $batcher): array
-{
-    return array_map(
-        fn(IngestionEvent $event): array => $event->toArray()['body'],
-        $batcher->eventsOfType('trace-create'),
-    );
-}
 
 function makeRememberingAgent(): Agent
 {
@@ -627,41 +505,56 @@ function makeContractAgent(?string $conversationId, ?object $participant = null)
 }
 
 it('sets the trace output to the agent response text', function () {
-    [$client, $batcher] = makeLangfuseClient();
-    $subscriber = makeSubscriber($client);
+    $fake = makeLangfuseClient();
+    $subscriber = makeSubscriber($fake);
     $prompt = makeAgentPrompt();
 
     $subscriber->handlePromptingAgent(new PromptingAgent(invocationId: 'inv-1', prompt: $prompt));
+    $timestamp = $fake->traces()[0]->getBody()->timestamp;
+
     $subscriber->handleAgentPrompted(new AgentPrompted(
         invocationId: 'inv-1',
         prompt: $prompt,
         response: makeAgentResponse(text: 'Final answer'),
     ));
 
-    [$created, $updated] = traceCreateBodies($batcher);
+    $body = traceBodies($fake)[0];
 
-    expect($updated['id'])->toBe($created['id'])
-        ->and($updated['output'])->toBe('Final answer')
-        ->and($updated['timestamp'])->toBe($created['timestamp']);
+    expect($body['output'])->toBe('Final answer')
+        ->and($body['timestamp'])->toBe($timestamp)
+        ->and($fake->traces()[0]->hasEnded())->toBeTrue();
 });
 
 it('does not overwrite the output of a trace it did not create', function () {
-    [$client, $batcher] = makeLangfuseClient();
-    $subscriber = makeSubscriber($client);
+    $fake = makeLangfuseClient();
+    $subscriber = makeSubscriber($fake);
 
-    $client->setCurrentTrace($client->trace(new TraceBody(id: 'workflow', output: ['status' => 'ok'])));
+    $fake->setCurrentTrace($fake->trace(new TraceBody(id: 'workflow', output: ['status' => 'ok'])));
 
     runAgentInvocation($subscriber, 'inv-1');
 
-    $bodies = traceCreateBodies($batcher);
+    $bodies = traceBodies($fake);
 
     expect($bodies)->toHaveCount(1)
         ->and($bodies[0]['output'])->toBe(['status' => 'ok']);
 });
 
+it('leaves an adopted trace open for its owner', function () {
+    $fake = makeLangfuseClient();
+    $subscriber = makeSubscriber($fake);
+
+    $trace = $fake->trace(new TraceBody(id: 'workflow', name: 'GET /chat'));
+    $fake->setCurrentTrace($trace);
+
+    runAgentInvocation($subscriber, 'inv-1');
+
+    expect($trace->hasEnded())->toBeFalse()
+        ->and($fake->currentTrace())->toBe($trace);
+});
+
 it('lets only the invocation that created the trace set its output', function () {
-    [$client, $batcher] = makeLangfuseClient();
-    $subscriber = makeSubscriber($client);
+    $fake = makeLangfuseClient();
+    $subscriber = makeSubscriber($fake);
     $prompt = makeAgentPrompt();
 
     $subscriber->handlePromptingAgent(new PromptingAgent(invocationId: 'outer', prompt: $prompt));
@@ -680,49 +573,54 @@ it('lets only the invocation that created the trace set its output', function ()
         response: makeAgentResponse(invocationId: 'outer', text: 'outer answer'),
     ));
 
-    $bodies = traceCreateBodies($batcher);
+    $bodies = traceBodies($fake);
 
-    expect($bodies)->toHaveCount(2)
-        ->and($bodies[1]['output'])->toBe('outer answer');
+    expect($bodies)->toHaveCount(1)
+        ->and($bodies[0]['output'])->toBe('outer answer');
 });
 
 it('sets sessionId and userId from an agent using the RemembersConversations trait', function () {
-    [$client, $batcher] = makeLangfuseClient();
-    $subscriber = makeSubscriber($client);
+    $fake = makeLangfuseClient();
+    $subscriber = makeSubscriber($fake);
 
     $agent = makeRememberingAgent()->continue('conversation-42', new GenericUser(['id' => 7]));
-    $prompt = makeAgentPrompt(agent: $agent);
 
-    $subscriber->handlePromptingAgent(new PromptingAgent(invocationId: 'inv-1', prompt: $prompt));
+    $subscriber->handlePromptingAgent(new PromptingAgent(
+        invocationId: 'inv-1',
+        prompt: makeAgentPrompt(agent: $agent),
+    ));
 
-    [$body] = traceCreateBodies($batcher);
+    $body = traceBodies($fake)[0];
 
     expect($body['sessionId'])->toBe('conversation-42')
         ->and($body['userId'])->toBe('7');
 });
 
 it('sets sessionId from an agent implementing the RemembersConversations contract', function () {
-    [$client, $batcher] = makeLangfuseClient();
-    $subscriber = makeSubscriber($client);
+    $fake = makeLangfuseClient();
+    $subscriber = makeSubscriber($fake);
 
-    $prompt = makeAgentPrompt(agent: makeContractAgent('conversation-42'));
+    $subscriber->handlePromptingAgent(new PromptingAgent(
+        invocationId: 'inv-1',
+        prompt: makeAgentPrompt(agent: makeContractAgent('conversation-42')),
+    ));
 
-    $subscriber->handlePromptingAgent(new PromptingAgent(invocationId: 'inv-1', prompt: $prompt));
-
-    [$body] = traceCreateBodies($batcher);
+    $body = traceBodies($fake)[0];
 
     expect($body['sessionId'])->toBe('conversation-42')
         ->and($body)->not->toHaveKey('userId');
 });
 
 it('tags the first turn of a new conversation from the response', function () {
-    [$client, $batcher] = makeLangfuseClient();
-    $subscriber = makeSubscriber($client);
+    $fake = makeLangfuseClient();
+    $subscriber = makeSubscriber($fake);
 
     $agent = makeRememberingAgent();
     $prompt = makeAgentPrompt(agent: $agent);
 
     $subscriber->handlePromptingAgent(new PromptingAgent(invocationId: 'inv-1', prompt: $prompt));
+
+    expect(traceBodies($fake)[0])->not->toHaveKey('sessionId');
 
     // Laravel AI creates the conversation after generation and stamps it on the response.
     $user = new GenericUser(['id' => 7]);
@@ -731,19 +629,18 @@ it('tags the first turn of a new conversation from the response', function () {
 
     $subscriber->handleAgentPrompted(new AgentPrompted(invocationId: 'inv-1', prompt: $prompt, response: $response));
 
-    [$created, $updated] = traceCreateBodies($batcher);
+    $body = traceBodies($fake)[0];
 
-    expect($created)->not->toHaveKey('sessionId')
-        ->and($updated['sessionId'])->toBe('conversation-new')
-        ->and($updated['userId'])->toBe('7')
-        ->and($updated['output'])->toBe('Hi');
+    expect($body['sessionId'])->toBe('conversation-new')
+        ->and($body['userId'])->toBe('7')
+        ->and($body['output'])->toBe('Hi');
 });
 
 it('adds session and user to an adopted trace without touching its output', function () {
-    [$client, $batcher] = makeLangfuseClient();
-    $subscriber = makeSubscriber($client);
+    $fake = makeLangfuseClient();
+    $subscriber = makeSubscriber($fake);
 
-    $client->setCurrentTrace($client->trace(new TraceBody(id: 'request', name: 'GET /chat')));
+    $fake->setCurrentTrace($fake->trace(new TraceBody(id: 'request', name: 'GET /chat')));
 
     $agent = makeRememberingAgent()->continue('conversation-42', new GenericUser(['id' => 7]));
     $prompt = makeAgentPrompt(agent: $agent);
@@ -751,29 +648,29 @@ it('adds session and user to an adopted trace without touching its output', func
     $subscriber->handlePromptingAgent(new PromptingAgent(invocationId: 'inv-1', prompt: $prompt));
     $subscriber->handleAgentPrompted(new AgentPrompted(invocationId: 'inv-1', prompt: $prompt, response: makeAgentResponse()));
 
-    [$created, $updated] = traceCreateBodies($batcher);
+    $body = traceBodies($fake)[0];
 
-    expect($updated['id'])->toBe('request')
-        ->and($updated['sessionId'])->toBe('conversation-42')
-        ->and($updated['userId'])->toBe('7')
-        ->and($updated)->not->toHaveKey('output');
+    expect($body['name'])->toBe('GET /chat')
+        ->and($body['sessionId'])->toBe('conversation-42')
+        ->and($body['userId'])->toBe('7')
+        ->and($body)->not->toHaveKey('output');
 });
 
 it('leaves sessionId and userId unset for an agent without conversation state', function () {
-    [$client, $batcher] = makeLangfuseClient();
-    $subscriber = makeSubscriber($client);
+    $fake = makeLangfuseClient();
+    $subscriber = makeSubscriber($fake);
 
     runAgentInvocation($subscriber, 'inv-1');
 
-    foreach (traceCreateBodies($batcher) as $body) {
+    foreach (traceBodies($fake) as $body) {
         expect($body)->not->toHaveKey('sessionId')
             ->and($body)->not->toHaveKey('userId');
     }
 });
 
 it('does not send sessionId when session tracing is disabled', function () {
-    [$client, $batcher] = makeLangfuseClient();
-    $subscriber = makeSubscriber($client, new LangfuseConfig(publicKey: 'pk', secretKey: 'sk', sessionTracingEnabled: false));
+    $fake = makeLangfuseClient();
+    $subscriber = makeSubscriber($fake, new LangfuseConfig(publicKey: 'pk', secretKey: 'sk', sessionTracingEnabled: false));
 
     $agent = makeRememberingAgent()->continue('conversation-42', new GenericUser(['id' => 7]));
     $prompt = makeAgentPrompt(agent: $agent);
@@ -781,15 +678,15 @@ it('does not send sessionId when session tracing is disabled', function () {
     $subscriber->handlePromptingAgent(new PromptingAgent(invocationId: 'inv-1', prompt: $prompt));
     $subscriber->handleAgentPrompted(new AgentPrompted(invocationId: 'inv-1', prompt: $prompt, response: makeAgentResponse()));
 
-    foreach (traceCreateBodies($batcher) as $body) {
+    foreach (traceBodies($fake) as $body) {
         expect($body)->not->toHaveKey('sessionId')
             ->and($body['userId'])->toBe('7');
     }
 });
 
 it('does not send userId when user tracing is disabled', function () {
-    [$client, $batcher] = makeLangfuseClient();
-    $subscriber = makeSubscriber($client, new LangfuseConfig(publicKey: 'pk', secretKey: 'sk', userTracingEnabled: false));
+    $fake = makeLangfuseClient();
+    $subscriber = makeSubscriber($fake, new LangfuseConfig(publicKey: 'pk', secretKey: 'sk', userTracingEnabled: false));
 
     $agent = makeRememberingAgent()->continue('conversation-42', new GenericUser(['id' => 7]));
     $prompt = makeAgentPrompt(agent: $agent);
@@ -797,20 +694,22 @@ it('does not send userId when user tracing is disabled', function () {
     $subscriber->handlePromptingAgent(new PromptingAgent(invocationId: 'inv-1', prompt: $prompt));
     $subscriber->handleAgentPrompted(new AgentPrompted(invocationId: 'inv-1', prompt: $prompt, response: makeAgentResponse()));
 
-    foreach (traceCreateBodies($batcher) as $body) {
+    foreach (traceBodies($fake) as $body) {
         expect($body)->not->toHaveKey('userId')
             ->and($body['sessionId'])->toBe('conversation-42');
     }
 });
 
 it('derives the userId from Eloquent-style and plain participants', function (object $participant, string $expected) {
-    [$client, $batcher] = makeLangfuseClient();
-    $subscriber = makeSubscriber($client);
+    $fake = makeLangfuseClient();
+    $subscriber = makeSubscriber($fake);
 
-    $prompt = makeAgentPrompt(agent: makeContractAgent('conversation-42', $participant));
-    $subscriber->handlePromptingAgent(new PromptingAgent(invocationId: 'inv-1', prompt: $prompt));
+    $subscriber->handlePromptingAgent(new PromptingAgent(
+        invocationId: 'inv-1',
+        prompt: makeAgentPrompt(agent: makeContractAgent('conversation-42', $participant)),
+    ));
 
-    expect(traceCreateBodies($batcher)[0]['userId'])->toBe($expected);
+    expect(traceBodies($fake)[0]['userId'])->toBe($expected);
 })->with([
     'getKey()' => [new class () {
         public function getKey(): int
@@ -820,3 +719,19 @@ it('derives the userId from Eloquent-style and plain participants', function (ob
     }, '42'],
     'id property' => [(object) ['id' => 'usr_9'], 'usr_9'],
 ]);
+
+it('exports the user and session on every span of the trace', function () {
+    $fake = makeLangfuseClient();
+    $subscriber = makeSubscriber($fake);
+
+    $agent = makeRememberingAgent()->continue('conversation-42', new GenericUser(['id' => 7]));
+    $prompt = makeAgentPrompt(agent: $agent);
+
+    $subscriber->handlePromptingAgent(new PromptingAgent(invocationId: 'inv-1', prompt: $prompt));
+    $subscriber->handleAgentPrompted(new AgentPrompted(invocationId: 'inv-1', prompt: $prompt, response: makeAgentResponse()));
+
+    $generation = $fake->recorder()->observationsOfType(ObservationType::Generation)[0];
+
+    expect($generation->context->body()->userId)->toBe('7')
+        ->and($generation->context->body()->sessionId)->toBe('conversation-42');
+});
