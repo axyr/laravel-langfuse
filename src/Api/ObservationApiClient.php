@@ -17,19 +17,35 @@ class ObservationApiClient implements ObservationApiClientInterface
 {
     use SerializesQueryParameters;
 
+    /** Window used for a get-by-id that does not pass one; v4 tables are time-partitioned. */
+    private const DEFAULT_LOOKBACK = '-30 days';
+
     public function __construct(
         private readonly LangfuseConfig $config,
     ) {}
 
-    public function get(string $observationId): ?ObservationResponse
-    {
-        try {
-            return $this->doGet($observationId);
-        } catch (\Throwable $throwable) {
-            Log::warning('Langfuse observation fetch error', ['message' => $throwable->getMessage()]);
+    /**
+     * v2 has no get-by-id route: a single observation is an `id` filter on the
+     * list. Pass the window you know the observation is in - without one this
+     * falls back to the last 30 days.
+     */
+    public function get(
+        string $observationId,
+        ?string $fromStartTime = null,
+        ?string $toStartTime = null,
+        ?string $fields = null,
+    ): ?ObservationResponse {
+        $query = new ObservationQuery(
+            fields: $fields,
+            limit: 1,
+            fromStartTime: $fromStartTime ?? $this->defaultFromStartTime(),
+            toStartTime: $toStartTime,
+            filter: ObservationQuery::idFilter($observationId),
+        );
 
-            return null;
-        }
+        $response = $this->getMany($query);
+
+        return $response?->data[0] ?? null;
     }
 
     public function getMany(?ObservationQuery $query = null): ?ObservationListResponse
@@ -41,30 +57,6 @@ class ObservationApiClient implements ObservationApiClientInterface
 
             return null;
         }
-    }
-
-    private function doGet(string $observationId): ?ObservationResponse
-    {
-        $response = Http::withHeaders([
-            'Authorization' => $this->config->authHeader(),
-            'Content-Type' => 'application/json',
-        ])
-            ->timeout($this->config->requestTimeout)
-            ->get($this->config->observationsUrl($observationId));
-
-        if (! $response->successful()) {
-            Log::warning('Langfuse observation fetch failed', [
-                'status' => $response->status(),
-                'observationId' => $observationId,
-            ]);
-
-            return null;
-        }
-
-        /** @var array<string, mixed> $data */
-        $data = $response->json() ?? [];
-
-        return ObservationResponse::fromArray($data);
     }
 
     private function doGetMany(?ObservationQuery $query): ?ObservationListResponse
@@ -90,5 +82,12 @@ class ObservationApiClient implements ObservationApiClientInterface
         $data = $response->json() ?? [];
 
         return ObservationListResponse::fromArray($data);
+    }
+
+    private function defaultFromStartTime(): string
+    {
+        return (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))
+            ->modify(self::DEFAULT_LOOKBACK)
+            ->format('Y-m-d\TH:i:s.u\Z');
     }
 }

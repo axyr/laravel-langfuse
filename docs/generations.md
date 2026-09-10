@@ -27,13 +27,15 @@ $generation->end(
 );
 ```
 
-The `end()` method also accepts `level` (an `ObservationLevel` enum) and `statusMessage` for error tracking. The `endTime` is auto-generated but can be overridden.
+**`end()` is what sends the generation.** Creating one records the start time and nothing else; the finished observation is exported exactly once, when it ends. A generation that never ends does not appear in Langfuse, unless the application shutdown hook ends it. Ending twice is ignored and logs a warning.
+
+`end()` also accepts `level` (an `ObservationLevel` enum) and `statusMessage` for error tracking. The `endTime` is auto-generated but can be overridden.
 
 Use `$generation->getId()` and `$generation->getTraceId()` to get the IDs.
 
 ## Usage and cost tracking
 
-The `Usage` DTO supports both token counts and cost:
+The `Usage` DTO carries token counts and cost:
 
 ```php
 $generation->end(
@@ -42,13 +44,30 @@ $generation->end(
         input: 100,
         output: 200,
         total: 300,
-        unit: 'TOKENS',
         inputCost: 0.0005,
         outputCost: 0.0015,
         totalCost: 0.002,
     ),
 );
 ```
+
+`input`, `output` and `total` are the conventional keys Langfuse understands out of the box. v4 accepts arbitrary extra usage and cost keys, so pass anything else your provider reports - cached tokens, reasoning tokens - through `details` and `costDetails`:
+
+```php
+$generation->end(
+    output: 'Response text',
+    usage: new Usage(
+        input: 100,
+        output: 200,
+        total: 300,
+        totalCost: 0.002,
+        details: ['cache_read' => 40, 'reasoning' => 15],
+        costDetails: ['cache_read' => 0.0001],
+    ),
+);
+```
+
+> `Usage::$unit` is gone. v4 has no usage unit; every count is a token count keyed by name.
 
 ## Error tracking
 
@@ -62,6 +81,8 @@ $generation->end(
     statusMessage: 'Rate limited by provider',
 );
 ```
+
+An `ERROR` level also sets the OpenTelemetry span status to error, with the status message attached.
 
 ---
 

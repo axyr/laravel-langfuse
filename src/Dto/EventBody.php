@@ -7,18 +7,30 @@ namespace Axyr\Langfuse\Dto;
 use Axyr\Langfuse\Contracts\SerializableInterface;
 use Axyr\Langfuse\Enums\ObservationLevel;
 
+/**
+ * An event is complete the moment it is created, so it is exported straight
+ * away with `endTime` equal to `startTime`. A custom `id` is normalised into a
+ * 16 hex character OTLP span id and a custom `traceId` into a 32 hex character
+ * trace id.
+ *
+ * @SuppressWarnings("PHPMD.ExcessiveParameterList")
+ */
 readonly class EventBody implements SerializableInterface
 {
     public string $id;
 
     public string $startTime;
 
+    public ?string $traceId;
+
+    public ?string $parentObservationId;
+
     /**
      * @param array<string, mixed>|null $metadata
      */
     public function __construct(
         ?string $id = null,
-        public ?string $traceId = null,
+        ?string $traceId = null,
         public ?string $name = null,
         ?string $startTime = null,
         public mixed $input = null,
@@ -26,12 +38,16 @@ readonly class EventBody implements SerializableInterface
         public ?array $metadata = null,
         public ?ObservationLevel $level = null,
         public ?string $statusMessage = null,
-        public ?string $parentObservationId = null,
+        ?string $parentObservationId = null,
         public ?string $version = null,
         public ?string $environment = null,
     ) {
-        $this->id = $id ?? IdGenerator::uuid();
+        $this->id = IdGenerator::normalizeObservationId($id);
         $this->startTime = $startTime ?? IdGenerator::timestamp();
+        $this->traceId = $traceId === null ? null : IdGenerator::normalizeTraceId($traceId);
+        $this->parentObservationId = $parentObservationId === null
+            ? null
+            : IdGenerator::normalizeObservationId($parentObservationId);
     }
 
     public function withTraceId(string $traceId): self

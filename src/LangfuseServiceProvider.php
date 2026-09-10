@@ -6,10 +6,11 @@ namespace Axyr\Langfuse;
 
 use Axyr\Langfuse\Api\DatasetApiClient;
 use Axyr\Langfuse\Api\DatasetItemApiClient;
-use Axyr\Langfuse\Api\DatasetRunApiClient;
+use Axyr\Langfuse\Api\ExperimentApiClient;
 use Axyr\Langfuse\Api\IngestionApiClient;
 use Axyr\Langfuse\Api\MetricsApiClient;
 use Axyr\Langfuse\Api\ObservationApiClient;
+use Axyr\Langfuse\Api\OtelTraceApiClient;
 use Axyr\Langfuse\Api\PromptApiClient;
 use Axyr\Langfuse\Api\ScoreApiClient;
 use Axyr\Langfuse\Batch\EventBatcher;
@@ -19,16 +20,18 @@ use Axyr\Langfuse\Cache\PromptCache;
 use Axyr\Langfuse\Config\LangfuseConfig;
 use Axyr\Langfuse\Contracts\DatasetApiClientInterface;
 use Axyr\Langfuse\Contracts\DatasetItemApiClientInterface;
-use Axyr\Langfuse\Contracts\DatasetRunApiClientInterface;
 use Axyr\Langfuse\Contracts\EventBatcherInterface;
+use Axyr\Langfuse\Contracts\ExperimentApiClientInterface;
 use Axyr\Langfuse\Contracts\IngestionApiClientInterface;
 use Axyr\Langfuse\Contracts\LangfuseClientInterface;
 use Axyr\Langfuse\Contracts\MetricsApiClientInterface;
 use Axyr\Langfuse\Contracts\ObservationApiClientInterface;
+use Axyr\Langfuse\Contracts\OtelTraceApiClientInterface;
 use Axyr\Langfuse\Contracts\PromptApiClientInterface;
 use Axyr\Langfuse\Contracts\PromptCacheInterface;
 use Axyr\Langfuse\Contracts\ScoreApiClientInterface;
 use Axyr\Langfuse\Contracts\TraceContextResolverInterface;
+use Axyr\Langfuse\Objects\OpenObservationRegistry;
 use Axyr\Langfuse\Prompt\CurrentPromptRegistry;
 use Axyr\Langfuse\Prompt\PromptManager;
 use Axyr\Langfuse\Tracing\AuthTraceContextResolver;
@@ -56,10 +59,12 @@ class LangfuseServiceProvider extends ServiceProvider
             __DIR__ . '/../config/langfuse.php' => $this->app->configPath('langfuse.php'),
         ], 'langfuse-config');
 
+        // v4 exports an observation only when it ends, so the terminate hook
+        // ends whatever is still open before the final flush.
         $this->app->terminating(function () {
-            /** @var EventBatcherInterface $batcher */
-            $batcher = $this->app->make(EventBatcherInterface::class);
-            $batcher->flush();
+            /** @var LangfuseClientInterface $langfuse */
+            $langfuse = $this->app->make(LangfuseClientInterface::class);
+            $langfuse->shutdown();
         });
 
         $this->registerPrismIntegration();
@@ -83,12 +88,15 @@ class LangfuseServiceProvider extends ServiceProvider
     private function registerIngestion(): void
     {
         $this->app->singleton(IngestionApiClientInterface::class, IngestionApiClient::class);
+        $this->app->singleton(OtelTraceApiClientInterface::class, OtelTraceApiClient::class);
         $this->app->singleton(ScoreApiClientInterface::class, ScoreApiClient::class);
         $this->app->singleton(ObservationApiClientInterface::class, ObservationApiClient::class);
         $this->app->singleton(MetricsApiClientInterface::class, MetricsApiClient::class);
         $this->app->singleton(DatasetApiClientInterface::class, DatasetApiClient::class);
         $this->app->singleton(DatasetItemApiClientInterface::class, DatasetItemApiClient::class);
-        $this->app->singleton(DatasetRunApiClientInterface::class, DatasetRunApiClient::class);
+        $this->app->singleton(ExperimentApiClientInterface::class, ExperimentApiClient::class);
+
+        $this->app->scoped(OpenObservationRegistry::class);
 
         $this->app->scoped(EventBatcherInterface::class, function () {
             /** @var LangfuseConfig $config */

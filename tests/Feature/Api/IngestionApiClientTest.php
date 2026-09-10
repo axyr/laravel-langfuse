@@ -7,7 +7,7 @@ use Axyr\Langfuse\Config\LangfuseConfig;
 use Axyr\Langfuse\Dto\IngestionBatch;
 use Axyr\Langfuse\Dto\IngestionEvent;
 use Axyr\Langfuse\Dto\IngestionResponse;
-use Axyr\Langfuse\Dto\TraceBody;
+use Axyr\Langfuse\Dto\ScoreBody;
 use Axyr\Langfuse\Enums\EventType;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -32,9 +32,9 @@ it('sends batch to correct url with auth headers', function () {
     $batch = new IngestionBatch(batch: [
         new IngestionEvent(
             id: 'evt-1',
-            type: EventType::TraceCreate,
+            type: EventType::ScoreCreate,
             timestamp: '2024-01-01T00:00:00Z',
-            body: new TraceBody(id: 'trace-1', name: 'test'),
+            body: new ScoreBody(name: 'accuracy', id: 'score-1', value: 1.0),
         ),
     ]);
 
@@ -122,9 +122,9 @@ it('sends correct payload structure', function () {
         batch: [
             new IngestionEvent(
                 id: 'evt-1',
-                type: EventType::TraceCreate,
+                type: EventType::ScoreCreate,
                 timestamp: '2024-01-01T00:00:00Z',
-                body: new TraceBody(id: 'trace-1'),
+                body: new ScoreBody(name: 'accuracy', id: 'score-1', value: 1.0),
             ),
         ],
         metadata: ['sdk_version' => '1.0.0'],
@@ -136,8 +136,8 @@ it('sends correct payload structure', function () {
         $data = $request->data();
 
         return $data['batch'][0]['id'] === 'evt-1'
-            && $data['batch'][0]['type'] === 'trace-create'
-            && $data['batch'][0]['body']['id'] === 'trace-1';
+            && $data['batch'][0]['type'] === 'score-create'
+            && $data['batch'][0]['body']['id'] === 'score-1';
     });
 });
 
@@ -150,7 +150,7 @@ it('sends raw payload via sendRaw', function () {
     ]);
 
     $payload = [
-        'batch' => [['id' => 'evt-1', 'type' => 'trace-create', 'timestamp' => '2024-01-01T00:00:00Z', 'body' => ['id' => 'trace-1']]],
+        'batch' => [['id' => 'evt-1', 'type' => 'score-create', 'timestamp' => '2024-01-01T00:00:00Z', 'body' => ['id' => 'score-1']]],
         'metadata' => (object) ['sdk_name' => 'langfuse-php'],
     ];
 

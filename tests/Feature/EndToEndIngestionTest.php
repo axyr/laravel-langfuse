@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Axyr\Langfuse\Dto\EventBody;
 use Axyr\Langfuse\Dto\GenerationBody;
+use Axyr\Langfuse\Dto\IdGenerator;
 use Axyr\Langfuse\Dto\ScoreBody;
 use Axyr\Langfuse\Dto\SpanBody;
 use Axyr\Langfuse\Dto\TraceBody;
@@ -12,6 +13,9 @@ use Axyr\Langfuse\Enums\ScoreDataType;
 use Axyr\Langfuse\LangfuseFacade;
 use Illuminate\Support\Facades\Http;
 
+const OTEL_ENDPOINT = 'e2e.langfuse.com/api/public/otel/v1/traces';
+const INGESTION_ENDPOINT = 'e2e.langfuse.com/api/public/ingestion';
+
 beforeEach(function () {
     config([
         'langfuse.public_key' => 'pk-e2e-test',
@@ -19,30 +23,48 @@ beforeEach(function () {
         'langfuse.base_url' => 'https://e2e.langfuse.com',
         'langfuse.enabled' => true,
         'langfuse.flush_at' => 100,
+        'langfuse.service_name' => 'e2e-app',
     ]);
 
     // Reset singletons with new config
     $this->app->forgetInstance(\Axyr\Langfuse\Config\LangfuseConfig::class);
     $this->app->forgetInstance(\Axyr\Langfuse\Contracts\EventBatcherInterface::class);
     $this->app->forgetInstance(\Axyr\Langfuse\Contracts\IngestionApiClientInterface::class);
+    $this->app->forgetInstance(\Axyr\Langfuse\Contracts\OtelTraceApiClientInterface::class);
+    $this->app->forgetInstance(\Axyr\Langfuse\Contracts\ScoreApiClientInterface::class);
     $this->app->forgetInstance(\Axyr\Langfuse\Contracts\LangfuseClientInterface::class);
+    $this->app->forgetInstance(\Axyr\Langfuse\Objects\OpenObservationRegistry::class);
 });
 
-it('sends complete trace with nested observations on flush', function () {
-    Http::fake([
-        'e2e.langfuse.com/api/public/ingestion' => Http::response([
-            'successes' => [
-                ['id' => 'evt-1', 'status' => 201],
-                ['id' => 'evt-2', 'status' => 201],
-                ['id' => 'evt-3', 'status' => 201],
-                ['id' => 'evt-4', 'status' => 201],
-                ['id' => 'evt-5', 'status' => 201],
-            ],
-            'errors' => [],
-        ]),
-    ]);
+/**
+ * @return array<int, array<string, mixed>>
+ */
+function sentSpans(\Illuminate\Http\Client\Request $request): array
+{
+    /** @var array<string, mixed> $body */
+    $body = json_decode($request->body(), true);
 
-    // Create trace
+    return $body['resourceSpans'][0]['scopeSpans'][0]['spans'];
+}
+
+/**
+ * @param  array<string, mixed>  $span
+ * @return array<string, mixed>
+ */
+function sentAttributes(array $span): array
+{
+    $attributes = [];
+
+    foreach ($span['attributes'] as $attribute) {
+        $attributes[$attribute['key']] = array_values($attribute['value'])[0];
+    }
+
+    return $attributes;
+}
+
+it('sends the complete trace with nested observations to the otlp endpoint on flush', function () {
+    Http::fake([OTEL_ENDPOINT => Http::response([])]);
+
     $trace = LangfuseFacade::trace(new TraceBody(
         id: 'trace-e2e',
         name: 'e2e-test',
@@ -51,14 +73,12 @@ it('sends complete trace with nested observations on flush', function () {
         tags: ['e2e'],
     ));
 
-    // Create span under trace
     $span = $trace->span(new SpanBody(
         id: 'span-e2e',
         name: 'processing',
         startTime: '2024-01-01T00:00:00Z',
     ));
 
-    // Create generation under span
     $generation = $span->generation(new GenerationBody(
         id: 'gen-e2e',
         name: 'chat-completion',
@@ -67,74 +87,88 @@ it('sends complete trace with nested observations on flush', function () {
         startTime: '2024-01-01T00:00:00.100Z',
     ));
 
-    // End generation
     $generation->end(
         output: ['role' => 'assistant', 'content' => 'Hi!'],
         usage: new Usage(input: 10, output: 5, total: 15),
     );
 
-    // End span
-    $span->end(
-        endTime: '2024-01-01T00:00:01Z',
-        output: 'completed',
-    );
+    $span->end(endTime: '2024-01-01T00:00:01Z', output: 'completed');
+    $trace->end(endTime: '2024-01-01T00:00:02Z', output: 'done');
 
-    // Flush all events
     LangfuseFacade::flush();
 
-    // Verify HTTP was called
     Http::assertSent(function ($request) {
-        $data = $request->data();
-
-        // Should have batch with multiple events
-        if (! isset($data['batch']) || ! is_array($data['batch'])) {
-            return false;
-        }
-
-        // Verify auth header
         $expectedAuth = 'Basic ' . base64_encode('pk-e2e-test:sk-e2e-test');
-        if (! $request->hasHeader('Authorization', $expectedAuth)) {
+
+        if ($request->url() !== 'https://e2e.langfuse.com/api/public/otel/v1/traces') {
             return false;
         }
 
-        // Verify URL
-        if ($request->url() !== 'https://e2e.langfuse.com/api/public/ingestion') {
+        if (! $request->hasHeader('Authorization', $expectedAuth)
+            || ! $request->hasHeader('x-langfuse-ingestion-version', '4')) {
             return false;
         }
 
-        // Collect event types
-        $types = array_column($data['batch'], 'type');
+        $names = array_column(sentSpans($request), 'name');
 
-        // Should have trace-create, span-create, generation-create, generation-update, span-update
-        return in_array('trace-create', $types)
-            && in_array('span-create', $types)
-            && in_array('generation-create', $types)
-            && in_array('generation-update', $types)
-            && in_array('span-update', $types);
+        return $names === ['chat-completion', 'processing', 'e2e-test'];
     });
 });
 
-it('sends trace with event and score on flush', function () {
-    Http::fake([
-        'e2e.langfuse.com/api/public/ingestion' => Http::response([
-            'successes' => [],
-            'errors' => [],
-        ]),
-    ]);
+it('exports each observation exactly once', function () {
+    Http::fake([OTEL_ENDPOINT => Http::response([])]);
+
+    $trace = LangfuseFacade::trace(new TraceBody(id: 'trace-once', name: 'once'));
+    $trace->span(new SpanBody(name: 'work'))->end();
+    $trace->end();
+
+    LangfuseFacade::flush();
+
+    Http::assertSentCount(1);
+    Http::assertSent(fn($request) => count(sentSpans($request)) === 2);
+});
+
+it('copies the trace-level attributes onto every span', function () {
+    Http::fake([OTEL_ENDPOINT => Http::response([])]);
 
     $trace = LangfuseFacade::trace(new TraceBody(
-        id: 'trace-events',
-        name: 'event-test',
+        id: 'trace-attrs',
+        name: 'attrs',
+        userId: 'user-1',
+        sessionId: 'session-1',
+        tags: ['e2e'],
     ));
 
-    // Add event
-    $trace->event(new EventBody(
-        id: 'event-1',
-        name: 'user-action',
-        input: ['action' => 'click'],
-    ));
+    $trace->span(new SpanBody(name: 'work'))->end();
+    $trace->end();
 
-    // Add score
+    LangfuseFacade::flush();
+
+    Http::assertSent(function ($request) {
+        foreach (sentSpans($request) as $span) {
+            $attributes = sentAttributes($span);
+
+            if (($attributes['langfuse.user.id'] ?? null) !== 'user-1'
+                || ($attributes['langfuse.session.id'] ?? null) !== 'session-1'
+                || ($attributes['langfuse.trace.name'] ?? null) !== 'attrs') {
+                return false;
+            }
+        }
+
+        return true;
+    });
+});
+
+it('sends an event to otlp and a score to the ingestion endpoint', function () {
+    Http::fake([
+        OTEL_ENDPOINT => Http::response([]),
+        INGESTION_ENDPOINT => Http::response(['successes' => [], 'errors' => []]),
+    ]);
+
+    $trace = LangfuseFacade::trace(new TraceBody(id: 'trace-events', name: 'event-test'));
+
+    $trace->event(new EventBody(id: 'event-1', name: 'user-action', input: ['action' => 'click']));
+
     $trace->score(new ScoreBody(
         id: 'score-1',
         name: 'satisfaction',
@@ -145,60 +179,73 @@ it('sends trace with event and score on flush', function () {
     LangfuseFacade::flush();
 
     Http::assertSent(function ($request) {
-        $data = $request->data();
-        $types = array_column($data['batch'], 'type');
+        if ($request->url() !== 'https://e2e.langfuse.com/api/public/otel/v1/traces') {
+            return false;
+        }
 
-        return in_array('trace-create', $types)
-            && in_array('event-create', $types)
-            && in_array('score-create', $types);
+        $spans = sentSpans($request);
+
+        return count($spans) === 1
+            && $spans[0]['name'] === 'user-action'
+            && sentAttributes($spans[0])['langfuse.observation.type'] === 'event';
+    });
+
+    Http::assertSent(function ($request) {
+        if ($request->url() !== 'https://e2e.langfuse.com/api/public/ingestion') {
+            return false;
+        }
+
+        $batch = $request->data()['batch'];
+
+        return count($batch) === 1
+            && $batch[0]['type'] === 'score-create'
+            && $batch[0]['body']['name'] === 'satisfaction'
+            && $batch[0]['body']['traceId'] === IdGenerator::traceIdFromSeed('trace-events');
     });
 });
 
-it('validates complete payload structure matches API contract', function () {
-    Http::fake([
-        'e2e.langfuse.com/api/public/ingestion' => Http::response([
-            'successes' => [['id' => 'evt-1', 'status' => 201]],
-            'errors' => [],
-        ]),
-    ]);
+it('validates the payload structure matches the otlp contract', function () {
+    Http::fake([OTEL_ENDPOINT => Http::response([])]);
 
-    LangfuseFacade::trace(new TraceBody(
+    $trace = LangfuseFacade::trace(new TraceBody(
         id: 'trace-structure',
         name: 'structure-test',
         input: ['prompt' => 'test'],
-        output: ['response' => 'test'],
         metadata: ['key' => 'value'],
     ));
+
+    $trace->end(output: ['response' => 'test']);
 
     LangfuseFacade::flush();
 
     Http::assertSent(function ($request) {
-        $data = $request->data();
+        /** @var array<string, mixed> $payload */
+        $payload = json_decode($request->body(), true);
 
-        // Top-level must have batch and metadata keys
-        if (! isset($data['batch']) || ! isset($data['metadata'])) {
+        if (array_keys($payload) !== ['resourceSpans']) {
             return false;
         }
 
-        $event = $data['batch'][0];
+        $resourceSpan = $payload['resourceSpans'][0];
+        $span = $resourceSpan['scopeSpans'][0]['spans'][0];
+        $attributes = sentAttributes($span);
 
-        // Each event must have id, type, timestamp, body
-        return isset($event['id'])
-            && isset($event['type'])
-            && isset($event['timestamp'])
-            && isset($event['body'])
-            && $event['body']['id'] === 'trace-structure'
-            && $event['body']['name'] === 'structure-test';
+        return $resourceSpan['scopeSpans'][0]['scope']['name'] === 'langfuse-php'
+            && $span['traceId'] === IdGenerator::traceIdFromSeed('trace-structure')
+            && preg_match('/^[0-9a-f]{16}$/', $span['spanId']) === 1
+            && ! isset($span['parentSpanId'])
+            && $span['kind'] === 1
+            && is_string($span['startTimeUnixNano'])
+            && is_string($span['endTimeUnixNano'])
+            && $span['name'] === 'structure-test'
+            && $attributes['langfuse.observation.input'] === '{"prompt":"test"}'
+            && $attributes['langfuse.observation.output'] === '{"response":"test"}'
+            && $attributes['langfuse.trace.metadata.key'] === 'value';
     });
 });
 
 it('handles deeply nested spans', function () {
-    Http::fake([
-        'e2e.langfuse.com/api/public/ingestion' => Http::response([
-            'successes' => [],
-            'errors' => [],
-        ]),
-    ]);
+    Http::fake([OTEL_ENDPOINT => Http::response([])]);
 
     $trace = LangfuseFacade::trace(new TraceBody(id: 'trace-nested'));
 
@@ -207,21 +254,34 @@ it('handles deeply nested spans', function () {
 
     $childSpan->end(output: 'child done');
     $parentSpan->end(output: 'parent done');
+    $trace->end();
 
     LangfuseFacade::flush();
 
     Http::assertSent(function ($request) {
-        $data = $request->data();
-        $bodies = array_column($data['batch'], 'body');
+        $spans = collect(sentSpans($request))->keyBy('name');
 
-        // Find the child span create event
-        foreach ($bodies as $body) {
-            if (($body['id'] ?? '') === 'span-child' && isset($body['parentObservationId'])) {
-                return $body['parentObservationId'] === 'span-parent'
-                    && $body['traceId'] === 'trace-nested';
-            }
-        }
+        return $spans['child']['parentSpanId'] === $spans['parent']['spanId']
+            && $spans['parent']['parentSpanId'] !== $spans['parent']['spanId']
+            && $spans['child']['traceId'] === IdGenerator::traceIdFromSeed('trace-nested')
+            && $spans['parent']['spanId'] === IdGenerator::spanIdFromSeed('span-parent')
+            && $spans['child']['spanId'] === IdGenerator::spanIdFromSeed('span-child');
+    });
+});
 
-        return false;
+it('ends the still open observations when the application terminates', function () {
+    Http::fake([OTEL_ENDPOINT => Http::response([])]);
+
+    $trace = LangfuseFacade::trace(new TraceBody(id: 'trace-terminate', name: 'terminate'));
+    $trace->span(new SpanBody(name: 'unfinished'));
+
+    $this->app->terminate();
+
+    Http::assertSent(function ($request) {
+        $spans = collect(sentSpans($request))->keyBy('name');
+
+        return $spans->has('unfinished')
+            && $spans->has('terminate')
+            && sentAttributes($spans['unfinished'])['langfuse.observation.status_message'] === 'ended by shutdown';
     });
 });

@@ -4,13 +4,17 @@ declare(strict_types=1);
 
 use Axyr\Langfuse\Api\IngestionApiClient;
 use Axyr\Langfuse\Batch\EventBatcher;
+use Axyr\Langfuse\Batch\ScoreBatchFactory;
 use Axyr\Langfuse\Config\LangfuseConfig;
-use Axyr\Langfuse\Contracts\IngestionApiClientInterface;
+use Axyr\Langfuse\Contracts\OtelTraceApiClientInterface;
+use Axyr\Langfuse\Contracts\ScoreApiClientInterface;
 use Axyr\Langfuse\Dto\IngestionBatch;
-use Axyr\Langfuse\Dto\IngestionEvent;
+use Axyr\Langfuse\Dto\SpanBody;
 use Axyr\Langfuse\Dto\TraceBody;
-use Axyr\Langfuse\Enums\EventType;
 use Axyr\Langfuse\LangfuseFacade;
+use Axyr\Langfuse\Otlp\OtlpRequestFactory;
+use Axyr\Langfuse\Tracing\CompletedObservation;
+use Axyr\Langfuse\Tracing\TraceContext;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -25,7 +29,10 @@ beforeEach(function () {
     $this->app->forgetInstance(\Axyr\Langfuse\Config\LangfuseConfig::class);
     $this->app->forgetInstance(\Axyr\Langfuse\Contracts\EventBatcherInterface::class);
     $this->app->forgetInstance(\Axyr\Langfuse\Contracts\IngestionApiClientInterface::class);
+    $this->app->forgetInstance(\Axyr\Langfuse\Contracts\OtelTraceApiClientInterface::class);
+    $this->app->forgetInstance(\Axyr\Langfuse\Contracts\ScoreApiClientInterface::class);
     $this->app->forgetInstance(\Axyr\Langfuse\Contracts\LangfuseClientInterface::class);
+    $this->app->forgetInstance(\Axyr\Langfuse\Objects\OpenObservationRegistry::class);
 });
 
 it('handles connection timeout without throwing', function () {
@@ -33,11 +40,9 @@ it('handles connection timeout without throwing', function () {
         throw new \Illuminate\Http\Client\ConnectionException('Connection timed out');
     });
 
-    Log::shouldReceive('warning')
-        ->atLeast()
-        ->once();
+    Log::shouldReceive('warning')->atLeast()->once();
 
-    $trace = LangfuseFacade::trace(new TraceBody(id: 'trace-timeout'));
+    LangfuseFacade::trace(new TraceBody(id: 'trace-timeout'))->end();
     LangfuseFacade::flush();
 
     // If we get here, no exception was thrown
@@ -49,53 +54,56 @@ it('handles DNS resolution failure without throwing', function () {
         throw new \Illuminate\Http\Client\ConnectionException('DNS resolution failed');
     });
 
-    Log::shouldReceive('warning')
-        ->atLeast()
-        ->once();
+    Log::shouldReceive('warning')->atLeast()->once();
 
-    $trace = LangfuseFacade::trace(new TraceBody(id: 'trace-dns'));
+    LangfuseFacade::trace(new TraceBody(id: 'trace-dns'))->end();
     LangfuseFacade::flush();
 
     expect(true)->toBeTrue();
 });
 
 it('handles 500 server error without throwing', function () {
-    Http::fake([
-        '*' => Http::response('Internal Server Error', 500),
-    ]);
+    Http::fake(['*' => Http::response('Internal Server Error', 500)]);
 
-    Log::shouldReceive('warning')
-        ->atLeast()
-        ->once();
+    Log::shouldReceive('warning')->atLeast()->once();
 
-    $trace = LangfuseFacade::trace(new TraceBody(id: 'trace-500'));
+    LangfuseFacade::trace(new TraceBody(id: 'trace-500'))->end();
     LangfuseFacade::flush();
 
     expect(true)->toBeTrue();
 });
 
 it('handles 401 unauthorized without throwing', function () {
-    Http::fake([
-        '*' => Http::response('Unauthorized', 401),
-    ]);
+    Http::fake(['*' => Http::response('Unauthorized', 401)]);
 
-    Log::shouldReceive('warning')
-        ->atLeast()
-        ->once();
+    Log::shouldReceive('warning')->atLeast()->once();
 
-    $trace = LangfuseFacade::trace(new TraceBody(id: 'trace-401'));
+    LangfuseFacade::trace(new TraceBody(id: 'trace-401'))->end();
     LangfuseFacade::flush();
 
     expect(true)->toBeTrue();
 });
 
 it('handles invalid JSON response without throwing', function () {
-    Http::fake([
-        '*' => Http::response('not json at all', 200),
-    ]);
+    Http::fake(['*' => Http::response('not json at all', 200)]);
 
-    $trace = LangfuseFacade::trace(new TraceBody(id: 'trace-invalid-json'));
+    LangfuseFacade::trace(new TraceBody(id: 'trace-invalid-json'))->end();
     LangfuseFacade::flush();
+
+    expect(true)->toBeTrue();
+});
+
+it('never throws out of shutdown', function () {
+    Http::fake(function () {
+        throw new \Illuminate\Http\Client\ConnectionException('Connection timed out');
+    });
+
+    Log::shouldReceive('warning')->atLeast()->once();
+
+    $trace = LangfuseFacade::trace(new TraceBody(id: 'trace-shutdown'));
+    $trace->span(new SpanBody(name: 'unfinished'));
+
+    LangfuseFacade::shutdown();
 
     expect(true)->toBeTrue();
 });
@@ -103,19 +111,23 @@ it('handles invalid JSON response without throwing', function () {
 it('resets batcher queue after failed flush', function () {
     $config = new LangfuseConfig(publicKey: 'pk', secretKey: 'sk', flushAt: 100);
 
-    $apiClient = Mockery::mock(IngestionApiClientInterface::class);
-    $apiClient->shouldReceive('send')
-        ->once()
-        ->andThrow(new RuntimeException('Network error'));
+    $otelClient = Mockery::mock(OtelTraceApiClientInterface::class);
+    $otelClient->shouldReceive('export')->once()->andThrow(new RuntimeException('Network error'));
 
-    $batcher = new EventBatcher($apiClient, $config);
+    Log::shouldReceive('warning')->atLeast()->once();
 
-    $batcher->enqueue(new IngestionEvent(
-        id: 'evt-1',
-        type: EventType::TraceCreate,
-        timestamp: '2024-01-01T00:00:00Z',
-        body: new TraceBody(id: 'trace-1'),
-    ));
+    $batcher = new EventBatcher(
+        otelClient: $otelClient,
+        scoreApiClient: Mockery::mock(ScoreApiClientInterface::class),
+        config: $config,
+        requestFactory: new OtlpRequestFactory($config),
+        scoreBatchFactory: new ScoreBatchFactory($config),
+    );
+
+    $context = new TraceContext(new TraceBody(id: 'trace-1'));
+    $body = (new SpanBody(name: 'work'))->withContext($context->traceId(), $context->rootObservationId());
+
+    $batcher->enqueue(CompletedObservation::span($body->completed('2024-01-01T00:00:01Z'), $context));
 
     expect($batcher->count())->toBe(1);
 
@@ -139,20 +151,15 @@ it('api client returns null on send failure without affecting subsequent calls',
             ->push(['successes' => [['id' => 'evt-1', 'status' => 201]], 'errors' => []]),
     ]);
 
-    Log::shouldReceive('warning')
-        ->once();
+    Log::shouldReceive('warning')->once();
 
-    $config = new LangfuseConfig(publicKey: 'pk', secretKey: 'sk');
-    $client = new IngestionApiClient($config);
-
+    $client = new IngestionApiClient(new LangfuseConfig(publicKey: 'pk', secretKey: 'sk'));
     $batch = new IngestionBatch(batch: []);
 
-    // First call fails
-    $result1 = $client->send($batch);
-    expect($result1)->toBeNull();
+    expect($client->send($batch))->toBeNull();
 
-    // Second call succeeds
-    $result2 = $client->send($batch);
-    expect($result2)->not->toBeNull()
-        ->and($result2->successes)->toHaveCount(1);
+    $result = $client->send($batch);
+
+    expect($result)->not->toBeNull()
+        ->and($result->successes)->toHaveCount(1);
 });

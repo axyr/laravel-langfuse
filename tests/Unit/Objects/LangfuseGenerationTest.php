@@ -2,113 +2,132 @@
 
 declare(strict_types=1);
 
-use Axyr\Langfuse\Contracts\EventBatcherInterface;
 use Axyr\Langfuse\Dto\GenerationBody;
-use Axyr\Langfuse\Dto\IngestionEvent;
+use Axyr\Langfuse\Dto\TraceBody;
 use Axyr\Langfuse\Dto\Usage;
-use Axyr\Langfuse\Enums\EventType;
 use Axyr\Langfuse\Enums\ObservationLevel;
+use Axyr\Langfuse\Enums\ObservationType;
 use Axyr\Langfuse\Objects\LangfuseGeneration;
+use Axyr\Langfuse\Objects\OpenObservationRegistry;
+use Axyr\Langfuse\Testing\RecordingEventBatcher;
+use Axyr\Langfuse\Tracing\TraceContext;
+use Illuminate\Support\Facades\Log;
 
-it('enqueues generation-create event on construction', function () {
-    $batcher = Mockery::mock(EventBatcherInterface::class);
-    $batcher->shouldReceive('enqueue')
-        ->once()
-        ->with(Mockery::on(function (IngestionEvent $event) {
-            return $event->type === EventType::GenerationCreate
-                && $event->body instanceof GenerationBody
-                && $event->body->id === 'gen-1'
-                && $event->body->model === 'gpt-4';
-        }));
+function generationOn(RecordingEventBatcher $batcher, ?GenerationBody $body = null, ?OpenObservationRegistry $registry = null): LangfuseGeneration
+{
+    $context = new TraceContext(new TraceBody(id: 'trace-1'));
 
-    new LangfuseGeneration(
-        body: new GenerationBody(id: 'gen-1', traceId: 'trace-1', model: 'gpt-4'),
+    return new LangfuseGeneration(
+        body: ($body ?? new GenerationBody(id: 'gen-1'))->withTraceId($context->traceId()),
         batcher: $batcher,
+        context: $context,
+        registry: $registry,
     );
+}
+
+it('sends nothing when the generation is created', function () {
+    $batcher = new RecordingEventBatcher();
+
+    generationOn($batcher, new GenerationBody(id: 'gen-1', model: 'gpt-4'));
+
+    expect($batcher->observations())->toBeEmpty();
 });
 
 it('exposes id and trace id', function () {
-    $batcher = Mockery::mock(EventBatcherInterface::class);
-    $batcher->shouldReceive('enqueue')->once();
+    $batcher = new RecordingEventBatcher();
+    $generation = generationOn($batcher);
 
-    $gen = new LangfuseGeneration(
-        body: new GenerationBody(id: 'gen-1', traceId: 'trace-1'),
-        batcher: $batcher,
-    );
-
-    expect($gen->getId())->toBe('gen-1')
-        ->and($gen->getTraceId())->toBe('trace-1');
+    expect($generation->getId())->toBe((new GenerationBody(id: 'gen-1'))->id)
+        ->and($generation->getTraceId())->toMatch('/^[0-9a-f]{32}$/');
 });
 
-it('sends generation-update event on end', function () {
-    $batcher = Mockery::mock(EventBatcherInterface::class);
-    $batcher->shouldReceive('enqueue')
-        ->twice() // create + update
-        ->with(Mockery::on(function (IngestionEvent $event) {
-            if ($event->type === EventType::GenerationUpdate) {
-                return $event->body instanceof GenerationBody
-                    && $event->body->id === 'gen-1'
-                    && $event->body->output === 'Hello world!';
-            }
+it('stamps a start time at creation', function () {
+    $generation = generationOn(new RecordingEventBatcher());
 
-            return true;
-        }));
-
-    $gen = new LangfuseGeneration(
-        body: new GenerationBody(id: 'gen-1', traceId: 'trace-1'),
-        batcher: $batcher,
-    );
-
-    $gen->end(output: 'Hello world!');
+    expect($generation->getBody()->startTime)->toMatch('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/');
 });
 
-it('sends generation-update with usage on end', function () {
-    $batcher = Mockery::mock(EventBatcherInterface::class);
-    $batcher->shouldReceive('enqueue')
-        ->twice()
-        ->with(Mockery::on(function (IngestionEvent $event) {
-            if ($event->type === EventType::GenerationUpdate) {
-                return $event->body instanceof GenerationBody
-                    && $event->body->usage instanceof Usage
-                    && $event->body->usage->input === 50
-                    && $event->body->usage->output === 100;
-            }
+it('exports one completed observation on end', function () {
+    $batcher = new RecordingEventBatcher();
+    $usage = new Usage(input: 10, output: 20, total: 30);
+    $generation = generationOn($batcher, new GenerationBody(
+        id: 'gen-1',
+        name: 'chat',
+        model: 'gpt-4',
+        startTime: '2024-01-01T00:00:00Z',
+    ));
 
-            return true;
-        }));
-
-    $gen = new LangfuseGeneration(
-        body: new GenerationBody(id: 'gen-1', traceId: 'trace-1'),
-        batcher: $batcher,
+    $generation->end(
+        endTime: '2024-01-01T00:00:02Z',
+        output: 'answer',
+        usage: $usage,
+        statusMessage: 'stop',
     );
 
-    $gen->end(
-        output: 'result',
-        usage: new Usage(input: 50, output: 100, total: 150),
-    );
+    expect($batcher->observations())->toHaveCount(1);
+
+    $exported = $batcher->observations()[0];
+
+    expect($exported->type())->toBe(ObservationType::Generation)
+        ->and($exported->name())->toBe('chat')
+        ->and($exported->startTime)->toBe('2024-01-01T00:00:00Z')
+        ->and($exported->endTime)->toBe('2024-01-01T00:00:02Z')
+        ->and($exported->body->output)->toBe('answer')
+        ->and($exported->body->usage)->toBe($usage)
+        ->and($exported->body->statusMessage)->toBe('stop')
+        ->and($exported->body->model)->toBe('gpt-4');
 });
 
-it('sends generation-update with level on end', function () {
-    $batcher = Mockery::mock(EventBatcherInterface::class);
-    $batcher->shouldReceive('enqueue')
-        ->twice()
-        ->with(Mockery::on(function (IngestionEvent $event) {
-            if ($event->type === EventType::GenerationUpdate) {
-                return $event->body instanceof GenerationBody
-                    && $event->body->level === ObservationLevel::ERROR
-                    && $event->body->statusMessage === 'Rate limited';
-            }
+it('records an error level on end', function () {
+    $batcher = new RecordingEventBatcher();
+    $generation = generationOn($batcher);
 
-            return true;
-        }));
+    $generation->end(statusMessage: 'boom', level: ObservationLevel::ERROR);
 
-    $gen = new LangfuseGeneration(
-        body: new GenerationBody(id: 'gen-1', traceId: 'trace-1'),
-        batcher: $batcher,
-    );
+    expect($batcher->observations()[0]->level())->toBe(ObservationLevel::ERROR)
+        ->and($batcher->observations()[0]->statusMessage())->toBe('boom');
+});
 
-    $gen->end(
-        level: ObservationLevel::ERROR,
-        statusMessage: 'Rate limited',
-    );
+it('warns and does nothing when a generation ends twice', function () {
+    Log::shouldReceive('warning')->once()->with('Langfuse generation ended twice', Mockery::any());
+
+    $batcher = new RecordingEventBatcher();
+    $generation = generationOn($batcher);
+
+    $generation->end();
+    $generation->end();
+
+    expect($batcher->observations())->toHaveCount(1);
+});
+
+it('defaults the end time to now', function () {
+    $batcher = new RecordingEventBatcher();
+
+    generationOn($batcher)->end();
+
+    expect($batcher->observations()[0]->endTime)
+        ->toMatch('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/');
+});
+
+it('registers itself and unregisters when it ends', function () {
+    $registry = new OpenObservationRegistry();
+    $batcher = new RecordingEventBatcher();
+
+    $generation = generationOn($batcher, null, $registry);
+
+    expect($registry->count())->toBe(1);
+
+    $generation->end();
+
+    expect($registry->count())->toBe(0)
+        ->and($generation->hasEnded())->toBeTrue();
+});
+
+it('marks a generation ended by shutdown with a warning level', function () {
+    $batcher = new RecordingEventBatcher();
+
+    generationOn($batcher)->endOnShutdown();
+
+    expect($batcher->observations()[0]->body->level)->toBe(ObservationLevel::WARNING)
+        ->and($batcher->observations()[0]->body->statusMessage)->toBe('ended by shutdown');
 });

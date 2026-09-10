@@ -26,6 +26,8 @@ it('end is a no-op', function () {
     $generation = new NullLangfuseGeneration();
 
     $generation->end(output: 'test');
+    $generation->endOnShutdown();
 
-    expect($generation->getId())->toBe('');
+    expect($generation->getId())->toBe('')
+        ->and($generation->hasEnded())->toBeTrue();
 });

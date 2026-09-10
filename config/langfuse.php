@@ -17,4 +17,7 @@ return [
     'environment' => env('LANGFUSE_TRACING_ENVIRONMENT', null),
     'user_tracing' => env('LANGFUSE_USER_TRACING', true),
     'session_tracing' => env('LANGFUSE_SESSION_TRACING', true),
+    'service_name' => env('LANGFUSE_SERVICE_NAME', env('APP_NAME', 'laravel')),
+    'compression' => env('LANGFUSE_COMPRESSION', false),
+    'release' => env('LANGFUSE_RELEASE', null),
 ];

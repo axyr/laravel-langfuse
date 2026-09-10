@@ -72,14 +72,15 @@ it('produces correct ingestion events for full workflow', function () {
         new \NeuronAI\Workflow\WorkflowState(['result' => 'Hello human']),
     ));
 
-    $types = array_map(
-        fn(\Axyr\Langfuse\Dto\IngestionEvent $e) => $e->type->value,
-        $batcher->events(),
+    $names = array_map(
+        fn(\Axyr\Langfuse\Tracing\CompletedObservation $o): string => $o->name(),
+        $batcher->observations(),
     );
 
-    expect($types)->toContain('trace-create')
-        ->and($types)->toContain('generation-create')
-        ->and($types)->toContain('generation-update');
+    expect($names)->toHaveCount(2)
+        ->and($names[0])->toBe('inference')
+        ->and($names[1])->toStartWith('neuron-ai-')
+        ->and($batcher->observationsOfType(\Axyr\Langfuse\Enums\ObservationType::Generation))->toHaveCount(1);
 });
 
 it('produces correct ingestion events for tool workflow', function () {
@@ -134,12 +135,9 @@ it('produces correct ingestion events for tool workflow', function () {
     $observer->onEvent('tool-calling', $agent, new \NeuronAI\Observability\Events\ToolCalling($tool));
     $observer->onEvent('tool-called', $agent, new \NeuronAI\Observability\Events\ToolCalled($tool));
 
-    $types = array_map(
-        fn(\Axyr\Langfuse\Dto\IngestionEvent $e) => $e->type->value,
-        $batcher->events(),
-    );
+    $spans = $batcher->observationsOfType(\Axyr\Langfuse\Enums\ObservationType::Tool);
 
-    expect($types)->toContain('trace-create')
-        ->and($types)->toContain('span-create')
-        ->and($types)->toContain('span-update');
+    expect($spans)->toHaveCount(1)
+        ->and($spans[0]->name())->toBe('tool-search')
+        ->and($spans[0]->body->output)->toBe('Search results');
 });

@@ -6,13 +6,20 @@ use Axyr\Langfuse\Batch\NullEventBatcher;
 use Axyr\Langfuse\Batch\QueuedEventBatcher;
 use Axyr\Langfuse\Config\LangfuseConfig;
 use Axyr\Langfuse\Contracts\EventBatcherInterface;
+use Axyr\Langfuse\Contracts\ExperimentApiClientInterface;
 use Axyr\Langfuse\Contracts\IngestionApiClientInterface;
 use Axyr\Langfuse\Contracts\LangfuseClientInterface;
+use Axyr\Langfuse\Contracts\MetricsApiClientInterface;
+use Axyr\Langfuse\Contracts\ObservationApiClientInterface;
+use Axyr\Langfuse\Contracts\OtelTraceApiClientInterface;
 use Axyr\Langfuse\Contracts\PromptApiClientInterface;
 use Axyr\Langfuse\Contracts\PromptCacheInterface;
 use Axyr\Langfuse\Contracts\ScoreApiClientInterface;
+use Axyr\Langfuse\Dto\SpanBody;
+use Axyr\Langfuse\Dto\TraceBody;
 use Axyr\Langfuse\LangfuseClient;
 use Axyr\Langfuse\LangfuseServiceProvider;
+use Axyr\Langfuse\Objects\OpenObservationRegistry;
 use Axyr\Langfuse\Prompt\CurrentPromptRegistry;
 use Axyr\Langfuse\Prompt\PromptManager;
 
@@ -129,4 +136,55 @@ it('binds CurrentPromptRegistry as scoped and forgets it between scopes', functi
     $this->app->forgetScopedInstances();
 
     expect($this->app->make(CurrentPromptRegistry::class))->not->toBe($registry1);
+});
+
+it('binds the read api clients as singletons', function (string $interface) {
+    expect($this->app->make($interface))->toBe($this->app->make($interface));
+})->with([
+    OtelTraceApiClientInterface::class,
+    ObservationApiClientInterface::class,
+    MetricsApiClientInterface::class,
+    ExperimentApiClientInterface::class,
+]);
+
+it('binds the observation registry as scoped', function () {
+    $registry = $this->app->make(OpenObservationRegistry::class);
+
+    expect($registry)->toBeInstanceOf(OpenObservationRegistry::class)
+        ->and($this->app->make(OpenObservationRegistry::class))->toBe($registry);
+
+    $this->app->forgetScopedInstances();
+
+    expect($this->app->make(OpenObservationRegistry::class))->not->toBe($registry);
+});
+
+it('no longer binds the removed dataset run client', function () {
+    expect(interface_exists('Axyr\\Langfuse\\Contracts\\DatasetRunApiClientInterface'))->toBeFalse();
+});
+
+it('ends the open observations and flushes when the application terminates', function () {
+    config([
+        'langfuse.public_key' => 'pk-test',
+        'langfuse.secret_key' => 'sk-test',
+        'langfuse.flush_at' => 100,
+    ]);
+
+    $this->app->forgetInstance(LangfuseConfig::class);
+    $this->app->forgetScopedInstances();
+
+    $batcher = new \Axyr\Langfuse\Testing\RecordingEventBatcher();
+    $this->app->instance(EventBatcherInterface::class, $batcher);
+
+    /** @var LangfuseClientInterface $langfuse */
+    $langfuse = $this->app->make(LangfuseClientInterface::class);
+
+    $trace = $langfuse->trace(new TraceBody(name: 'request'));
+    $trace->span(new SpanBody(name: 'work'));
+
+    expect($batcher->observations())->toBeEmpty();
+
+    $this->app->terminate();
+
+    expect($batcher->observations())->toHaveCount(2)
+        ->and($trace->hasEnded())->toBeTrue();
 });
