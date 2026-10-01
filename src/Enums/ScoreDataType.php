@@ -9,4 +9,6 @@ enum ScoreDataType: string
     case NUMERIC = 'NUMERIC';
     case BOOLEAN = 'BOOLEAN';
     case CATEGORICAL = 'CATEGORICAL';
+    case TEXT = 'TEXT';
+    case CORRECTION = 'CORRECTION';
 }

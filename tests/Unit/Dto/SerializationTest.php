@@ -2,165 +2,221 @@
 
 declare(strict_types=1);
 
-use Axyr\Langfuse\Dto\EventBody;
+use Axyr\Langfuse\Config\LangfuseConfig;
 use Axyr\Langfuse\Dto\GenerationBody;
-use Axyr\Langfuse\Dto\ScoreBody;
 use Axyr\Langfuse\Dto\SpanBody;
+use Axyr\Langfuse\Dto\Timestamp;
 use Axyr\Langfuse\Dto\TraceBody;
 use Axyr\Langfuse\Dto\Usage;
-use Axyr\Langfuse\Enums\ObservationLevel;
-use Axyr\Langfuse\Enums\ScoreDataType;
+use Axyr\Langfuse\Objects\LangfuseTrace;
+use Axyr\Langfuse\Otlp\OtlpRequestFactory;
+use Axyr\Langfuse\Testing\RecordingEventBatcher;
+use Axyr\Langfuse\Version;
 
-dataset('trace bodies', function () {
-    yield 'minimal trace' => [
-        fn() => new TraceBody(id: 'trace-min', timestamp: '2024-01-01T00:00:00.000000Z'),
-        ['id' => 'trace-min', 'timestamp' => '2024-01-01T00:00:00.000000Z'],
-    ];
+/**
+ * The canary payload: one trace with a root span, one generation and one child
+ * span, serialised exactly as it goes on the wire to
+ * POST /api/public/otel/v1/traces. Keep this in step with what the manual canary
+ * run against a real Langfuse project sends.
+ *
+ * @return array<string, mixed>
+ */
+function canaryPayload(): array
+{
+    static $payload = null;
 
-    yield 'trace with name' => [
-        fn() => new TraceBody(id: 'trace-name', name: 'my-trace', timestamp: '2024-01-01T00:00:00.000000Z'),
-        ['id' => 'trace-name', 'timestamp' => '2024-01-01T00:00:00.000000Z', 'name' => 'my-trace'],
-    ];
+    if ($payload !== null) {
+        return $payload;
+    }
 
-    yield 'trace with all fields' => [
-        fn() => new TraceBody(
-            id: 'trace-full',
-            name: 'full-trace',
+    $batcher = new RecordingEventBatcher();
+
+    $trace = new LangfuseTrace(
+        body: new TraceBody(
+            id: 'canary-trace',
+            name: 'canary',
             userId: 'user-1',
             sessionId: 'session-1',
-            release: 'v1.0.0',
-            version: '1',
-            input: 'hello',
-            output: 'world',
-            metadata: ['key' => 'value'],
-            tags: ['tag1'],
-            public: true,
+            release: '1.2.3',
+            version: 'v9',
+            input: 'What is Langfuse?',
+            metadata: ['source' => 'canary'],
+            tags: ['canary', 'v4'],
+            public: false,
             timestamp: '2024-01-01T00:00:00.000000Z',
-            environment: 'production',
+            environment: 'staging',
         ),
-        [
-            'id' => 'trace-full',
-            'timestamp' => '2024-01-01T00:00:00.000000Z',
-            'name' => 'full-trace',
-            'userId' => 'user-1',
-            'sessionId' => 'session-1',
-            'release' => 'v1.0.0',
-            'version' => '1',
-            'input' => 'hello',
-            'output' => 'world',
-            'metadata' => ['key' => 'value'],
-            'tags' => ['tag1'],
-            'public' => true,
-            'environment' => 'production',
-        ],
-    ];
+        batcher: $batcher,
+    );
+
+    $trace->generation(new GenerationBody(
+        id: 'canary-generation',
+        name: 'gpt-4',
+        startTime: '2024-01-01T00:00:00.500000Z',
+        model: 'gpt-4',
+        modelParameters: ['temperature' => 0.7],
+        promptName: 'movie-critic',
+        promptVersion: 7,
+    ))->end(
+        endTime: '2024-01-01T00:00:02.000000Z',
+        output: 'An LLM observability platform.',
+        usage: new Usage(input: 10, output: 20, total: 30, totalCost: 0.003),
+    );
+
+    $trace->span(new SpanBody(
+        id: 'canary-span',
+        name: 'lookup',
+        startTime: '2024-01-01T00:00:02.000000Z',
+        input: ['query' => 'langfuse'],
+    ))->end(endTime: '2024-01-01T00:00:03.000000Z', output: ['hits' => 3]);
+
+    $trace->end(endTime: '2024-01-01T00:00:04.000000Z', output: 'An LLM observability platform.');
+
+    $factory = new OtlpRequestFactory(new LangfuseConfig(
+        publicKey: 'pk-canary',
+        secretKey: 'sk-canary',
+        serviceName: 'canary-app',
+    ));
+
+    $payload = $factory->build($batcher->observations())[0]->toArray();
+
+    return $payload;
+}
+
+/**
+ * @return array<string, mixed>
+ */
+function spanNamed(string $name): array
+{
+    $spans = canaryPayload()['resourceSpans'][0]['scopeSpans'][0]['spans'];
+
+    foreach ($spans as $span) {
+        if ($span['name'] === $name) {
+            return $span;
+        }
+    }
+
+    throw new RuntimeException("No span named {$name} in the canary payload.");
+}
+
+/**
+ * @param  array<string, mixed>  $span
+ * @return array<string, mixed>
+ */
+function flatAttributes(array $span): array
+{
+    $attributes = [];
+
+    foreach ($span['attributes'] as $attribute) {
+        $attributes[$attribute['key']] = array_values($attribute['value'])[0];
+    }
+
+    return $attributes;
+}
+
+it('posts one resourceSpans entry with the resource and the scope', function () {
+    $payload = canaryPayload();
+
+    expect(array_keys($payload))->toBe(['resourceSpans'])
+        ->and($payload['resourceSpans'])->toHaveCount(1)
+        ->and($payload['resourceSpans'][0]['resource']['attributes'])->toBe([
+            ['key' => 'service.name', 'value' => ['stringValue' => 'canary-app']],
+            ['key' => 'telemetry.sdk.name', 'value' => ['stringValue' => 'langfuse-php']],
+            ['key' => 'telemetry.sdk.language', 'value' => ['stringValue' => 'php']],
+            ['key' => 'telemetry.sdk.version', 'value' => ['stringValue' => Version::SDK_VERSION]],
+        ])
+        ->and($payload['resourceSpans'][0]['scopeSpans'][0]['scope'])->toBe([
+            'name' => 'langfuse-php',
+            'version' => Version::SDK_VERSION,
+        ]);
 });
 
-dataset('score bodies', function () {
-    yield 'minimal score' => [
-        fn() => new ScoreBody(name: 'accuracy', id: 'score-min', traceId: 'trace-1'),
-        ['id' => 'score-min', 'traceId' => 'trace-1', 'name' => 'accuracy'],
-    ];
+it('exports the generation, the child span and the root span exactly once each', function () {
+    $spans = canaryPayload()['resourceSpans'][0]['scopeSpans'][0]['spans'];
 
-    yield 'numeric score' => [
-        fn() => new ScoreBody(name: 'accuracy', id: 'score-num', traceId: 'trace-1', value: 0.95, dataType: ScoreDataType::NUMERIC),
-        ['id' => 'score-num', 'traceId' => 'trace-1', 'name' => 'accuracy', 'value' => 0.95, 'dataType' => 'NUMERIC'],
-    ];
-
-    yield 'boolean score' => [
-        fn() => new ScoreBody(name: 'is_correct', id: 'score-bool', traceId: 'trace-1', stringValue: 'true', dataType: ScoreDataType::BOOLEAN),
-        ['id' => 'score-bool', 'traceId' => 'trace-1', 'name' => 'is_correct', 'stringValue' => 'true', 'dataType' => 'BOOLEAN'],
-    ];
-
-    yield 'categorical score' => [
-        fn() => new ScoreBody(name: 'quality', id: 'score-cat', traceId: 'trace-1', stringValue: 'good', dataType: ScoreDataType::CATEGORICAL),
-        ['id' => 'score-cat', 'traceId' => 'trace-1', 'name' => 'quality', 'stringValue' => 'good', 'dataType' => 'CATEGORICAL'],
-    ];
+    expect($spans)->toHaveCount(3)
+        ->and(array_column($spans, 'name'))->toBe(['gpt-4', 'lookup', 'canary']);
 });
 
-dataset('event bodies', function () {
-    yield 'minimal event' => [
-        fn() => new EventBody(id: 'event-min', startTime: '2024-01-01T00:00:00.000000Z'),
-        ['id' => 'event-min', 'startTime' => '2024-01-01T00:00:00.000000Z'],
-    ];
+it('nests both children under the root span of the trace', function () {
+    $root = spanNamed('canary');
 
-    yield 'event with level' => [
-        fn() => new EventBody(id: 'event-lvl', name: 'test', startTime: '2024-01-01T00:00:00.000000Z', level: ObservationLevel::WARNING),
-        ['id' => 'event-lvl', 'name' => 'test', 'startTime' => '2024-01-01T00:00:00.000000Z', 'level' => 'WARNING'],
-    ];
+    expect($root)->not->toHaveKey('parentSpanId')
+        ->and(spanNamed('gpt-4')['parentSpanId'])->toBe($root['spanId'])
+        ->and(spanNamed('lookup')['parentSpanId'])->toBe($root['spanId'])
+        ->and(spanNamed('gpt-4')['traceId'])->toBe($root['traceId'])
+        ->and(spanNamed('lookup')['traceId'])->toBe($root['traceId']);
 });
 
-dataset('span bodies', function () {
-    yield 'minimal span' => [
-        fn() => new SpanBody(id: 'span-min'),
-        ['id' => 'span-min'],
-    ];
+it('writes hex ids and nanosecond string edges', function () {
+    $generation = spanNamed('gpt-4');
 
-    yield 'span with times' => [
-        fn() => new SpanBody(id: 'span-time', startTime: '2024-01-01T00:00:00Z', endTime: '2024-01-01T00:00:01Z'),
-        ['id' => 'span-time', 'startTime' => '2024-01-01T00:00:00Z', 'endTime' => '2024-01-01T00:00:01Z'],
-    ];
+    expect($generation['traceId'])->toMatch('/^[0-9a-f]{32}$/')
+        ->and($generation['spanId'])->toMatch('/^[0-9a-f]{16}$/')
+        ->and($generation['kind'])->toBe(1)
+        ->and($generation['startTimeUnixNano'])->toBe(Timestamp::toUnixNano('2024-01-01T00:00:00.500000Z'))
+        ->and($generation['endTimeUnixNano'])->toBe(Timestamp::toUnixNano('2024-01-01T00:00:02.000000Z'))
+        ->and($generation['status'])->toBe(['code' => 0, 'message' => '']);
 });
 
-dataset('generation bodies', function () {
-    yield 'minimal generation' => [
-        fn() => new GenerationBody(id: 'gen-min'),
-        ['id' => 'gen-min'],
-    ];
-
-    yield 'generation with model' => [
-        fn() => new GenerationBody(id: 'gen-model', model: 'gpt-4', modelParameters: ['temperature' => 0.7]),
-        ['id' => 'gen-model', 'model' => 'gpt-4', 'modelParameters' => ['temperature' => 0.7]],
-    ];
-
-    yield 'generation with usage' => [
-        fn() => new GenerationBody(id: 'gen-usage', usage: new Usage(input: 100, output: 200, total: 300)),
-        ['id' => 'gen-usage', 'usage' => ['input' => 100, 'output' => 200, 'total' => 300]],
-    ];
+it('puts the trace-level attributes on every span', function () {
+    foreach (['canary', 'gpt-4', 'lookup'] as $name) {
+        expect(flatAttributes(spanNamed($name)))->toMatchArray([
+            'langfuse.trace.name' => 'canary',
+            'langfuse.user.id' => 'user-1',
+            'langfuse.session.id' => 'session-1',
+            'langfuse.release' => '1.2.3',
+            'langfuse.version' => 'v9',
+            'langfuse.environment' => 'staging',
+            'langfuse.trace.public' => false,
+            'langfuse.trace.metadata.source' => 'canary',
+        ]);
+    }
 });
 
-dataset('usage bodies', function () {
-    yield 'empty usage' => [
-        new Usage(),
-        [],
-    ];
+it('emits the trace tags as an otlp array value', function () {
+    $tags = array_values(array_filter(
+        spanNamed('canary')['attributes'],
+        fn(array $attribute): bool => $attribute['key'] === 'langfuse.trace.tags',
+    ));
 
-    yield 'token usage' => [
-        new Usage(input: 100, output: 200, total: 300, unit: 'TOKENS'),
-        ['input' => 100, 'output' => 200, 'total' => 300, 'unit' => 'TOKENS'],
-    ];
-
-    yield 'cost usage' => [
-        new Usage(inputCost: 0.0005, outputCost: 0.0015, totalCost: 0.002),
-        ['inputCost' => 0.0005, 'outputCost' => 0.0015, 'totalCost' => 0.002],
-    ];
+    expect($tags[0]['value'])->toBe([
+        'arrayValue' => ['values' => [['stringValue' => 'canary'], ['stringValue' => 'v4']]],
+    ]);
 });
 
-it('serializes trace body correctly', function (Closure|TraceBody $body, array $expected) {
-    $body = $body instanceof Closure ? $body() : $body;
-    expect($body->toArray())->toBe($expected);
-})->with('trace bodies');
+it('carries the trace input and output on the root observation only', function () {
+    expect(flatAttributes(spanNamed('canary')))->toMatchArray([
+        'langfuse.observation.type' => 'span',
+        'langfuse.observation.input' => 'What is Langfuse?',
+        'langfuse.observation.output' => 'An LLM observability platform.',
+    ]);
+});
 
-it('serializes score body correctly', function (Closure|ScoreBody $body, array $expected) {
-    $body = $body instanceof Closure ? $body() : $body;
-    expect($body->toArray())->toBe($expected);
-})->with('score bodies');
+it('maps the generation model, usage, cost and prompt link', function () {
+    expect(flatAttributes(spanNamed('gpt-4')))->toMatchArray([
+        'langfuse.observation.type' => 'generation',
+        'langfuse.observation.model.name' => 'gpt-4',
+        'langfuse.observation.model.parameters' => '{"temperature":0.7}',
+        'langfuse.observation.usage_details' => '{"input":10,"output":20,"total":30}',
+        'langfuse.observation.cost_details' => '{"total":0.003}',
+        'langfuse.observation.prompt.name' => 'movie-critic',
+        'langfuse.observation.prompt.version' => 7,
+        'langfuse.observation.output' => 'An LLM observability platform.',
+    ]);
+});
 
-it('serializes event body correctly', function (Closure|EventBody $body, array $expected) {
-    $body = $body instanceof Closure ? $body() : $body;
-    expect($body->toArray())->toBe($expected);
-})->with('event bodies');
+it('json encodes structured span input and output', function () {
+    expect(flatAttributes(spanNamed('lookup')))->toMatchArray([
+        'langfuse.observation.type' => 'span',
+        'langfuse.observation.input' => '{"query":"langfuse"}',
+        'langfuse.observation.output' => '{"hits":3}',
+    ]);
+});
 
-it('serializes span body correctly', function (Closure|SpanBody $body, array $expected) {
-    $body = $body instanceof Closure ? $body() : $body;
-    expect($body->toArray())->toBe($expected);
-})->with('span bodies');
+it('encodes to json without escaped slashes or unicode', function () {
+    $json = json_encode(canaryPayload(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
 
-it('serializes generation body correctly', function (Closure|GenerationBody $body, array $expected) {
-    $body = $body instanceof Closure ? $body() : $body;
-    expect($body->toArray())->toBe($expected);
-})->with('generation bodies');
-
-it('serializes usage correctly', function (Usage $body, array $expected) {
-    expect($body->toArray())->toBe($expected);
-})->with('usage bodies');
+    expect($json)->toBeString()
+        ->and($json)->toContain('"resourceSpans"');
+});

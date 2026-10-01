@@ -11,7 +11,7 @@ readonly class ScoreListResponse
      */
     public function __construct(
         public array $data,
-        public PromptListMeta $meta,
+        public CursorMeta $meta,
     ) {}
 
     /**
@@ -30,7 +30,7 @@ readonly class ScoreListResponse
                 fn(array $item): ScoreResponse => ScoreResponse::fromArray($item),
                 $items,
             ),
-            meta: PromptListMeta::fromArray($meta),
+            meta: CursorMeta::fromArray($meta),
         );
     }
 }

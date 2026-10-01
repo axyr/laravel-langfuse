@@ -19,7 +19,7 @@ LANGFUSE_LARAVEL_AI_ENABLED=true
 The SDK listens to Laravel AI's event system:
 
 - **Agent prompts** - each `prompt()` or `stream()` call creates a trace and generation with model name, token usage, input, and output
-- **Tool invocations** - each tool call creates a span under the agent's trace with arguments and results
+- **Tool invocations** - each tool call creates a span under the agent's trace with arguments and results, marked with the `tool` observation type
 
 ## Users and sessions
 
@@ -42,9 +42,17 @@ When agent calls nest under a request trace from `LangfuseMiddleware` or a manua
 
 Set `LANGFUSE_SESSION_TRACING=false` or `LANGFUSE_USER_TRACING=false` to stop forwarding either identifier. For a session that is not a Laravel AI conversation (a support ticket, a checkout), bind a custom `TraceContextResolverInterface` as described in the configuration docs.
 
+## Trace lifecycle
+
+Since 0.4.0 an observation is only sent when it ends, so the integration ends what it creates:
+
+- The generation and every tool span end as soon as their event fires.
+- A trace the integration created itself is ended when the invocation completes, and the current trace is reset, so the next invocation starts a fresh trace.
+- A trace it adopted - from `LangfuseMiddleware` or from your own `setCurrentTrace()` - is never ended by the integration. It stays open for its owner, who ends it or relies on the application shutdown hook.
+
 ## Request grouping
 
-Multiple agent calls within the same request share a single trace. If you use `LangfuseMiddleware`, agent generations nest under the request trace automatically.
+If a trace is already current, agent generations nest under it and multiple agent calls within the same request share it. With `LangfuseMiddleware` that happens automatically.
 
 ## Combining with manual tracing
 
@@ -62,7 +70,12 @@ Langfuse::setCurrentTrace($trace);
 
 // This agent call now appears under your custom trace
 $response = (new MyAgent)->prompt('Do something');
+
+// You own this trace, so you end it
+$trace->end(output: $response->text);
 ```
+
+In a queue worker or a CLI command, call `Langfuse::shutdown()` when the job is done: it ends anything still open and flushes.
 
 ---
 

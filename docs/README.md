@@ -10,9 +10,9 @@ For installation and quick start, see the [main README](../README.md).
 - [Tracing](tracing.md) - creating and updating traces, nesting observations
 - [Generations](generations.md) - LLM generation tracking, usage and cost, error tracking
 - [Spans and Events](spans-and-events.md) - spans for non-LLM work, lightweight event logging
-- [Scores](scores.md) - numeric, boolean, and categorical quality scores
+- [Scores](scores.md) - numeric, boolean, categorical, text and correction quality scores
 - [Prompt Management](prompt-management.md) - fetch, cache, compile, create, and list prompts
-- [Querying (read API)](querying.md) - read scores/observations, the metrics/query API, and the datasets → runs → run-items evaluation workflow
+- [Querying (read API)](querying.md) - read scores/observations, the metrics/query API, and the datasets → experiments → experiment-items evaluation workflow
 - **Integrations**
   - [Prism](integrations/prism.md) - auto-instrumentation for Prism LLM calls
   - [Laravel AI](integrations/laravel-ai.md) - auto-instrumentation for the Laravel AI SDK
@@ -21,4 +21,5 @@ For installation and quick start, see the [main README](../README.md).
 - [Batching and Flushing](batching-and-flushing.md) - auto-flush, manual flush, queued dispatch
 - [Testing](testing.md) - fakes, assertions, disabling tracing in tests
 - [Architecture](architecture.md) - system diagram, Octane compatibility
-- [Troubleshooting](troubleshooting.md) - Langfuse v3 compatibility, common issues, debugging
+- [Troubleshooting](troubleshooting.md) - Langfuse v4 tracing, common issues, debugging
+- [Upgrading to 0.4](upgrade-to-0.4.md) - what changed for Langfuse v4 and what you need to do

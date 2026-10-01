@@ -4,15 +4,15 @@ declare(strict_types=1);
 
 use Axyr\Langfuse\Dto\IngestionBatch;
 use Axyr\Langfuse\Dto\IngestionEvent;
-use Axyr\Langfuse\Dto\TraceBody;
+use Axyr\Langfuse\Dto\ScoreBody;
 use Axyr\Langfuse\Enums\EventType;
 
 it('can be constructed with events', function () {
     $event = new IngestionEvent(
         id: 'evt-1',
-        type: EventType::TraceCreate,
+        type: EventType::ScoreCreate,
         timestamp: '2024-01-01T00:00:00Z',
-        body: new TraceBody(id: 'trace-1'),
+        body: new ScoreBody(name: 'accuracy', id: 'score-1'),
     );
 
     $batch = new IngestionBatch(batch: [$event]);
@@ -24,9 +24,9 @@ it('can be constructed with events', function () {
 it('serializes to array with batch and metadata', function () {
     $event = new IngestionEvent(
         id: 'evt-1',
-        type: EventType::TraceCreate,
+        type: EventType::ScoreCreate,
         timestamp: '2024-01-01T00:00:00Z',
-        body: new TraceBody(id: 'trace-1', name: 'test', timestamp: '2024-01-01T00:00:00Z'),
+        body: new ScoreBody(name: 'accuracy', id: 'score-1', value: 1.0),
     );
 
     $batch = new IngestionBatch(
@@ -39,9 +39,9 @@ it('serializes to array with batch and metadata', function () {
     expect($array['batch'])->toHaveCount(1)
         ->and($array['batch'][0])->toBe([
             'id' => 'evt-1',
-            'type' => 'trace-create',
+            'type' => 'score-create',
             'timestamp' => '2024-01-01T00:00:00Z',
-            'body' => ['id' => 'trace-1', 'timestamp' => '2024-01-01T00:00:00Z', 'name' => 'test'],
+            'body' => ['id' => 'score-1', 'name' => 'accuracy', 'value' => 1.0],
         ])
         ->and($array['metadata'])->toBeObject();
 });

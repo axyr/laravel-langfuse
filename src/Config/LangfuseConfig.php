@@ -25,6 +25,9 @@ readonly class LangfuseConfig
         public ?string $environment = null,
         public bool $userTracingEnabled = true,
         public bool $sessionTracingEnabled = true,
+        public string $serviceName = 'laravel',
+        public bool $compression = false,
+        public ?string $release = null,
     ) {}
 
     /**
@@ -47,6 +50,9 @@ readonly class LangfuseConfig
             environment: self::parseEnvironment($config['environment'] ?? null),
             userTracingEnabled: self::parseBool($config['user_tracing'] ?? true),
             sessionTracingEnabled: self::parseBool($config['session_tracing'] ?? true),
+            serviceName: self::parseString($config['service_name'] ?? null, 'laravel'),
+            compression: self::parseBool($config['compression'] ?? false),
+            release: self::parseNullableString($config['release'] ?? null),
         );
     }
 
@@ -124,16 +130,12 @@ readonly class LangfuseConfig
     }
 
     /**
-     * @return array<string, mixed>
+     * The OTLP endpoint that replaces the deprecated ingestion endpoint for
+     * observations. Scores keep using ingestionUrl().
      */
-    public function batchMetadata(int $batchSize): array
+    public function otelTracesUrl(): string
     {
-        return [
-            'batch_size' => $batchSize,
-            'sdk_name' => 'langfuse-php',
-            'sdk_version' => '2.1.0',
-            'public_key' => $this->publicKey,
-        ];
+        return rtrim($this->baseUrl, '/') . '/api/public/otel/v1/traces';
     }
 
     public function ingestionUrl(): string
@@ -152,26 +154,9 @@ readonly class LangfuseConfig
         return $url;
     }
 
-    public function scoresV2Url(?string $scoreId = null): string
+    public function scoresV3Url(): string
     {
-        $url = rtrim($this->baseUrl, '/') . '/api/public/v2/scores';
-
-        if ($scoreId !== null) {
-            $url .= '/' . urlencode($scoreId);
-        }
-
-        return $url;
-    }
-
-    public function observationsUrl(?string $observationId = null): string
-    {
-        $url = rtrim($this->baseUrl, '/') . '/api/public/observations';
-
-        if ($observationId !== null) {
-            $url .= '/' . urlencode($observationId);
-        }
-
-        return $url;
+        return rtrim($this->baseUrl, '/') . '/api/public/v3/scores';
     }
 
     public function observationsV2Url(): string
@@ -179,9 +164,9 @@ readonly class LangfuseConfig
         return rtrim($this->baseUrl, '/') . '/api/public/v2/observations';
     }
 
-    public function metricsUrl(): string
+    public function metricsV2Url(): string
     {
-        return rtrim($this->baseUrl, '/') . '/api/public/metrics';
+        return rtrim($this->baseUrl, '/') . '/api/public/v2/metrics';
     }
 
     public function datasetsUrl(?string $datasetName = null): string
@@ -206,20 +191,14 @@ readonly class LangfuseConfig
         return $url;
     }
 
-    public function datasetRunsUrl(string $datasetName, ?string $runName = null): string
+    public function experimentsUrl(): string
     {
-        $url = rtrim($this->baseUrl, '/') . '/api/public/datasets/' . urlencode($datasetName) . '/runs';
-
-        if ($runName !== null) {
-            $url .= '/' . urlencode($runName);
-        }
-
-        return $url;
+        return rtrim($this->baseUrl, '/') . '/api/public/experiments';
     }
 
-    public function datasetRunItemsUrl(): string
+    public function experimentItemsUrl(): string
     {
-        return rtrim($this->baseUrl, '/') . '/api/public/dataset-run-items';
+        return rtrim($this->baseUrl, '/') . '/api/public/experiment-items';
     }
 
     public function promptsUrl(?string $name = null): string

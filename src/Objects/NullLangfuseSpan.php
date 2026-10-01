@@ -7,6 +7,7 @@ namespace Axyr\Langfuse\Objects;
 use Axyr\Langfuse\Dto\EventBody;
 use Axyr\Langfuse\Dto\GenerationBody;
 use Axyr\Langfuse\Dto\SpanBody;
+use Axyr\Langfuse\Enums\ObservationLevel;
 
 class NullLangfuseSpan extends LangfuseSpan
 {
@@ -20,6 +21,16 @@ class NullLangfuseSpan extends LangfuseSpan
     public function getTraceId(): ?string
     {
         return null;
+    }
+
+    public function getBody(): SpanBody
+    {
+        return new SpanBody();
+    }
+
+    public function hasEnded(): bool
+    {
+        return true;
     }
 
     public function span(SpanBody $span): LangfuseSpan
@@ -38,5 +49,8 @@ class NullLangfuseSpan extends LangfuseSpan
         ?string $endTime = null,
         mixed $output = null,
         ?string $statusMessage = null,
+        ?ObservationLevel $level = null,
     ): void {}
+
+    public function endOnShutdown(): void {}
 }

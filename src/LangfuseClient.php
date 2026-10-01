@@ -4,12 +4,11 @@ declare(strict_types=1);
 
 namespace Axyr\Langfuse;
 
-use Axyr\Langfuse\Concerns\CreatesIngestionEvents;
 use Axyr\Langfuse\Config\LangfuseConfig;
 use Axyr\Langfuse\Contracts\DatasetApiClientInterface;
 use Axyr\Langfuse\Contracts\DatasetItemApiClientInterface;
-use Axyr\Langfuse\Contracts\DatasetRunApiClientInterface;
 use Axyr\Langfuse\Contracts\EventBatcherInterface;
+use Axyr\Langfuse\Contracts\ExperimentApiClientInterface;
 use Axyr\Langfuse\Contracts\LangfuseClientInterface;
 use Axyr\Langfuse\Contracts\MetricsApiClientInterface;
 use Axyr\Langfuse\Contracts\ObservationApiClientInterface;
@@ -19,17 +18,17 @@ use Axyr\Langfuse\Contracts\ScoreApiClientInterface;
 use Axyr\Langfuse\Contracts\TraceContextResolverInterface;
 use Axyr\Langfuse\Dto\CreateDatasetBody;
 use Axyr\Langfuse\Dto\CreateDatasetItemBody;
-use Axyr\Langfuse\Dto\CreateDatasetRunItemBody;
 use Axyr\Langfuse\Dto\CreatePromptBody;
 use Axyr\Langfuse\Dto\DatasetItemListResponse;
 use Axyr\Langfuse\Dto\DatasetItemQuery;
 use Axyr\Langfuse\Dto\DatasetItemResponse;
 use Axyr\Langfuse\Dto\DatasetListResponse;
 use Axyr\Langfuse\Dto\DatasetResponse;
-use Axyr\Langfuse\Dto\DatasetRunItemListResponse;
-use Axyr\Langfuse\Dto\DatasetRunItemResponse;
-use Axyr\Langfuse\Dto\DatasetRunListResponse;
-use Axyr\Langfuse\Dto\DatasetRunWithItemsResponse;
+use Axyr\Langfuse\Dto\ExperimentItemListResponse;
+use Axyr\Langfuse\Dto\ExperimentItemQuery;
+use Axyr\Langfuse\Dto\ExperimentListResponse;
+use Axyr\Langfuse\Dto\ExperimentQuery;
+use Axyr\Langfuse\Dto\ExperimentResponse;
 use Axyr\Langfuse\Dto\MetricQuery;
 use Axyr\Langfuse\Dto\MetricsResponse;
 use Axyr\Langfuse\Dto\ObservationListResponse;
@@ -41,18 +40,19 @@ use Axyr\Langfuse\Dto\ScoreListResponse;
 use Axyr\Langfuse\Dto\ScoreQuery;
 use Axyr\Langfuse\Dto\ScoreResponse;
 use Axyr\Langfuse\Dto\TraceBody;
-use Axyr\Langfuse\Enums\EventType;
 use Axyr\Langfuse\Objects\LangfuseTrace;
 use Axyr\Langfuse\Objects\NullLangfuseTrace;
+use Axyr\Langfuse\Objects\OpenObservationRegistry;
 use Axyr\Langfuse\Prompt\CurrentPromptRegistry;
 use Axyr\Langfuse\Prompt\PromptManager;
 use Axyr\Langfuse\Tracing\NullTraceContextResolver;
 use Illuminate\Support\Facades\Log;
 
+/**
+ * @SuppressWarnings("PHPMD.ExcessiveParameterList")
+ */
 class LangfuseClient implements LangfuseClientInterface
 {
-    use CreatesIngestionEvents;
-
     private LangfuseTrace $currentTrace;
 
     public function __construct(
@@ -65,7 +65,8 @@ class LangfuseClient implements LangfuseClientInterface
         private readonly MetricsApiClientInterface $metricsApiClient,
         private readonly DatasetApiClientInterface $datasetApiClient,
         private readonly DatasetItemApiClientInterface $datasetItemApiClient,
-        private readonly DatasetRunApiClientInterface $datasetRunApiClient,
+        private readonly ExperimentApiClientInterface $experimentApiClient,
+        private readonly OpenObservationRegistry $registry = new OpenObservationRegistry(),
         private readonly CurrentPromptRegistry $promptRegistry = new CurrentPromptRegistry(),
         private readonly TraceContextResolverInterface $contextResolver = new NullTraceContextResolver(),
     ) {
@@ -75,8 +76,11 @@ class LangfuseClient implements LangfuseClientInterface
     public function trace(TraceBody $body): LangfuseTrace
     {
         return new LangfuseTrace(
-            body: $this->applyTraceContext($body->withEnvironment($this->config->environment)),
+            body: $this->applyTraceContext(
+                $body->withEnvironment($this->config->environment)->withRelease($this->config->release),
+            ),
             batcher: $this->batcher,
+            registry: $this->registry,
         );
     }
 
@@ -125,12 +129,9 @@ class LangfuseClient implements LangfuseClientInterface
         $this->currentTrace = $trace;
     }
 
-    public function score(ScoreBody $body): void
+    public function score(ScoreBody $body, ?string $timestamp = null): void
     {
-        $this->batcher->enqueue($this->createIngestionEvent(
-            type: EventType::ScoreCreate,
-            body: $body->withEnvironment($this->config->environment),
-        ));
+        $this->batcher->enqueueScore($body->withEnvironment($this->config->environment), $timestamp);
     }
 
     public function getScore(string $scoreId): ?ScoreResponse
@@ -148,9 +149,13 @@ class LangfuseClient implements LangfuseClientInterface
         return $this->scoreApiClient->delete($scoreId);
     }
 
-    public function getObservation(string $observationId): ?ObservationResponse
-    {
-        return $this->observationApiClient->get($observationId);
+    public function getObservation(
+        string $observationId,
+        ?string $fromStartTime = null,
+        ?string $toStartTime = null,
+        ?string $fields = null,
+    ): ?ObservationResponse {
+        return $this->observationApiClient->get($observationId, $fromStartTime, $toStartTime, $fields);
     }
 
     public function getObservations(?ObservationQuery $query = null): ?ObservationListResponse
@@ -198,34 +203,34 @@ class LangfuseClient implements LangfuseClientInterface
         return $this->datasetItemApiClient->delete($id);
     }
 
-    public function getDatasetRun(string $datasetName, string $runName): ?DatasetRunWithItemsResponse
+    public function listExperiments(ExperimentQuery $query): ?ExperimentListResponse
     {
-        return $this->datasetRunApiClient->getRun($datasetName, $runName);
+        return $this->experimentApiClient->listExperiments($query);
     }
 
-    public function listDatasetRuns(string $datasetName, ?int $page = null, ?int $limit = null): ?DatasetRunListResponse
+    public function listExperimentItems(ExperimentItemQuery $query): ?ExperimentItemListResponse
     {
-        return $this->datasetRunApiClient->listRuns($datasetName, $page, $limit);
+        return $this->experimentApiClient->listExperimentItems($query);
     }
 
-    public function deleteDatasetRun(string $datasetName, string $runName): bool
+    public function getExperiment(string $experimentId, string $fromStartTime, ?string $toStartTime = null): ?ExperimentResponse
     {
-        return $this->datasetRunApiClient->deleteRun($datasetName, $runName);
-    }
-
-    public function createDatasetRunItem(CreateDatasetRunItemBody $body): ?DatasetRunItemResponse
-    {
-        return $this->datasetRunApiClient->createRunItem($body);
-    }
-
-    public function listDatasetRunItems(string $datasetId, string $runName, ?int $page = null, ?int $limit = null): ?DatasetRunItemListResponse
-    {
-        return $this->datasetRunApiClient->listRunItems($datasetId, $runName, $page, $limit);
+        return $this->experimentApiClient->getExperiment($experimentId, $fromStartTime, $toStartTime);
     }
 
     public function flush(): void
     {
         $this->batcher->flush();
+    }
+
+    public function shutdown(): void
+    {
+        $this->registry->endAll();
+        $this->batcher->flush();
+
+        // The unit of work is over: drop the references so a long-running process
+        // that shuts down repeatedly does not accumulate them.
+        $this->registry->reset();
     }
 
     public function isEnabled(): bool

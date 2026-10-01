@@ -22,7 +22,7 @@ it('builds a minimal query, omitting empty optionals', function () {
 
 it('builds a full query with dimensions, time dimension and config', function () {
     $query = new MetricQuery(
-        view: 'traces',
+        view: 'observations',
         metrics: [['measure' => 'count', 'aggregation' => 'count']],
         fromTimestamp: '2024-05-01T00:00:00Z',
         toTimestamp: '2024-05-02T00:00:00Z',
@@ -35,7 +35,7 @@ it('builds a full query with dimensions, time dimension and config', function ()
     );
 
     expect($query->toArray())->toBe([
-        'view' => 'traces',
+        'view' => 'observations',
         'metrics' => [['measure' => 'count', 'aggregation' => 'count']],
         'dimensions' => [['field' => 'name']],
         'filters' => [['column' => 'userId', 'operator' => '=', 'value' => 'u1', 'type' => 'string']],

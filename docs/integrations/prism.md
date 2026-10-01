@@ -22,7 +22,20 @@ Other Prism methods (`embeddings()`, `images()`, etc.) pass through without trac
 
 ## Request grouping
 
-Multiple Prism calls within the same request share a single trace. If you use `LangfuseMiddleware`, Prism generations nest under the request trace automatically.
+If a trace is already current - from `LangfuseMiddleware` or from manual tracing - Prism generations nest under it, and it is left open for whoever owns it. Multiple Prism calls then share that single trace.
+
+When there is no current trace, Prism creates one for the call, ends it as soon as the generation ends, with the response text as the trace output. That keeps each standalone Prism call a complete unit of work, which matters in queue workers and CLI commands where the terminate hook fires late or not at all.
+
+If you want several standalone Prism calls in one trace, set a trace yourself:
+
+```php
+$trace = Langfuse::trace(new TraceBody(name: 'my-workflow'));
+Langfuse::setCurrentTrace($trace);
+
+// ... several Prism calls ...
+
+$trace->end();
+```
 
 ---
 

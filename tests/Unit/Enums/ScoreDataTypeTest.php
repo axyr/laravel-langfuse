@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 use Axyr\Langfuse\Enums\ScoreDataType;
 
-it('has 3 cases', function () {
-    expect(ScoreDataType::cases())->toHaveCount(3);
+it('has 5 cases', function () {
+    expect(ScoreDataType::cases())->toHaveCount(5);
 });
 
 it('has correct values', function (ScoreDataType $case, string $expected) {
@@ -14,4 +14,6 @@ it('has correct values', function (ScoreDataType $case, string $expected) {
     [ScoreDataType::NUMERIC, 'NUMERIC'],
     [ScoreDataType::BOOLEAN, 'BOOLEAN'],
     [ScoreDataType::CATEGORICAL, 'CATEGORICAL'],
+    [ScoreDataType::TEXT, 'TEXT'],
+    [ScoreDataType::CORRECTION, 'CORRECTION'],
 ]);

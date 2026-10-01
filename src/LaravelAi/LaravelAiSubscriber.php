@@ -11,6 +11,7 @@ use Axyr\Langfuse\Dto\GenerationBody;
 use Axyr\Langfuse\Dto\SpanBody;
 use Axyr\Langfuse\Dto\TraceBody;
 use Axyr\Langfuse\Dto\Usage;
+use Axyr\Langfuse\Enums\ObservationType;
 use Axyr\Langfuse\Objects\LangfuseSpan;
 use Axyr\Langfuse\Objects\LangfuseTrace;
 use Axyr\Langfuse\Objects\NullLangfuseTrace;
@@ -74,7 +75,7 @@ class LaravelAiSubscriber
         $trace = $this->resolveTrace($event->invocationId, fn(): TraceBody => $this->traceBodyFor($event));
 
         $this->recordGeneration($trace, $event, $startTime, $endTime);
-        $this->updateTrace($trace, $event);
+        $this->completeTrace($trace, $event);
 
         unset($this->startTimes[$event->invocationId], $this->managedPrompts[$event->invocationId]);
     }
@@ -116,6 +117,7 @@ class LaravelAiSubscriber
             name: "tool-{$toolName}",
             startTime: $this->formatTime($this->toolStartTimes[$event->toolInvocationId]),
             input: $event->arguments,
+            type: ObservationType::Tool,
         ));
 
         $this->toolSpans[$event->toolInvocationId] = $span;
@@ -173,10 +175,30 @@ class LaravelAiSubscriber
      * trace output only for traces this subscriber created, so a request trace or
      * a manual workflow trace keeps its own output. Session and user ids are sent
      * for every trace, since a new conversation only gets its id after the run.
+     *
+     * A trace this subscriber owns is also ended here: in v4 the root
+     * observation is exported by `end()`. Adopted traces are left open for
+     * whoever owns them.
      */
-    private function updateTrace(LangfuseTrace $trace, AgentPrompted $event): void
+    private function completeTrace(LangfuseTrace $trace, AgentPrompted $event): void
     {
         $owned = isset($this->ownedInvocations[$event->invocationId]);
+
+        $this->updateTrace($trace, $event, $owned);
+
+        if (! $owned) {
+            return;
+        }
+
+        $trace->end();
+
+        $this->langfuse->setCurrentTrace(new NullLangfuseTrace());
+
+        unset($this->traces[$event->invocationId], $this->ownedInvocations[$event->invocationId]);
+    }
+
+    private function updateTrace(LangfuseTrace $trace, AgentPrompted $event, bool $owned): void
+    {
         $context = $this->contextFor($event->prompt->agent, $event->response);
 
         if (! $owned && $context->isEmpty()) {

@@ -6,17 +6,17 @@ namespace Axyr\Langfuse\Contracts;
 
 use Axyr\Langfuse\Dto\CreateDatasetBody;
 use Axyr\Langfuse\Dto\CreateDatasetItemBody;
-use Axyr\Langfuse\Dto\CreateDatasetRunItemBody;
 use Axyr\Langfuse\Dto\CreatePromptBody;
 use Axyr\Langfuse\Dto\DatasetItemListResponse;
 use Axyr\Langfuse\Dto\DatasetItemQuery;
 use Axyr\Langfuse\Dto\DatasetItemResponse;
 use Axyr\Langfuse\Dto\DatasetListResponse;
 use Axyr\Langfuse\Dto\DatasetResponse;
-use Axyr\Langfuse\Dto\DatasetRunItemListResponse;
-use Axyr\Langfuse\Dto\DatasetRunItemResponse;
-use Axyr\Langfuse\Dto\DatasetRunListResponse;
-use Axyr\Langfuse\Dto\DatasetRunWithItemsResponse;
+use Axyr\Langfuse\Dto\ExperimentItemListResponse;
+use Axyr\Langfuse\Dto\ExperimentItemQuery;
+use Axyr\Langfuse\Dto\ExperimentListResponse;
+use Axyr\Langfuse\Dto\ExperimentQuery;
+use Axyr\Langfuse\Dto\ExperimentResponse;
 use Axyr\Langfuse\Dto\MetricQuery;
 use Axyr\Langfuse\Dto\MetricsResponse;
 use Axyr\Langfuse\Dto\ObservationListResponse;
@@ -38,7 +38,11 @@ interface LangfuseClientInterface
 
     public function setCurrentTrace(LangfuseTrace $trace): void;
 
-    public function score(ScoreBody $body): void;
+    /**
+     * `$timestamp` sets the ingestion envelope timestamp, which together with
+     * the score id and name decides whether a score overwrites an earlier one.
+     */
+    public function score(ScoreBody $body, ?string $timestamp = null): void;
 
     public function getScore(string $scoreId): ?ScoreResponse;
 
@@ -46,7 +50,12 @@ interface LangfuseClientInterface
 
     public function deleteScore(string $scoreId): bool;
 
-    public function getObservation(string $observationId): ?ObservationResponse;
+    public function getObservation(
+        string $observationId,
+        ?string $fromStartTime = null,
+        ?string $toStartTime = null,
+        ?string $fields = null,
+    ): ?ObservationResponse;
 
     public function getObservations(?ObservationQuery $query = null): ?ObservationListResponse;
 
@@ -66,17 +75,20 @@ interface LangfuseClientInterface
 
     public function deleteDatasetItem(string $id): bool;
 
-    public function getDatasetRun(string $datasetName, string $runName): ?DatasetRunWithItemsResponse;
+    public function listExperiments(ExperimentQuery $query): ?ExperimentListResponse;
 
-    public function listDatasetRuns(string $datasetName, ?int $page = null, ?int $limit = null): ?DatasetRunListResponse;
+    public function listExperimentItems(ExperimentItemQuery $query): ?ExperimentItemListResponse;
 
-    public function deleteDatasetRun(string $datasetName, string $runName): bool;
-
-    public function createDatasetRunItem(CreateDatasetRunItemBody $body): ?DatasetRunItemResponse;
-
-    public function listDatasetRunItems(string $datasetId, string $runName, ?int $page = null, ?int $limit = null): ?DatasetRunItemListResponse;
+    public function getExperiment(string $experimentId, string $fromStartTime, ?string $toStartTime = null): ?ExperimentResponse;
 
     public function flush(): void;
+
+    /**
+     * Ends every observation that is still open and flushes. This is what the
+     * application terminate hook calls; call it yourself in long-running
+     * processes such as queue workers and CLI commands.
+     */
+    public function shutdown(): void;
 
     public function isEnabled(): bool;
 

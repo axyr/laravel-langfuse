@@ -28,26 +28,36 @@ $generation->end(
     output: 'Hi there!',
     usage: new Usage(input: 12, output: 85, total: 97),
 );
+
+$trace->end(output: 'Hi there!');
 ```
 
-Events are batched and flushed automatically. Zero-code auto-instrumentation is available for [Laravel AI](https://laravel.com/docs/ai-sdk), [Prism](https://github.com/prism-php/prism), and [Neuron AI](https://github.com/neuron-core/neuron-ai).
+Observations are batched and flushed automatically. Zero-code auto-instrumentation is available for [Laravel AI](https://laravel.com/docs/ai-sdk), [Prism](https://github.com/prism-php/prism), and [Neuron AI](https://github.com/neuron-core/neuron-ai).
 
 <p><img src="art/langfuse-screenshot.png" alt="Langfuse trace view showing a RAG pipeline with nested spans, token usage, costs, and evaluation scores - all sent from Laravel"></p>
 
 ## Features
 
 - **Full observability** - traces, spans, generations, events, and scores with automatic parent-child nesting
-- **Read & evaluate** - query scores, observations, and metrics, and manage datasets, runs, and run-items to build evaluation workflows ([read API](docs/querying.md))
+- **Read & evaluate** - query scores, observations, and metrics, and manage datasets, dataset items and experiments to build evaluation workflows ([read API](docs/querying.md))
 - **Prompt management** - fetch, cache, compile, create, and list prompts with stale-while-revalidate caching
 - **Auto-instrumentation** - zero-code tracing for Prism, Laravel AI, and Neuron AI
-- **Automatic batching** - events queued and sent in batches, with optional async dispatch via Laravel queues
-- **Production-ready** - Octane compatible, graceful degradation, auto-flush on shutdown, testing fakes
+- **Automatic batching** - completed observations queued and sent in batches over OTLP, with optional async dispatch via Laravel queues
+- **Production-ready** - Octane compatible, graceful degradation, auto-end and auto-flush on shutdown, testing fakes
 
 ## Installation
 
-Requires PHP 8.2+ and Laravel 12 or 13.
+Requires PHP 8.2+ and Laravel 12 or 13. No PHP extensions beyond the core `hash`, `random_bytes` and `json`; `zlib` is only needed when you turn on `LANGFUSE_COMPRESSION`.
 
-**Langfuse Compatibility:** This package is compatible with both Langfuse v2 and v3. For self-hosted deployments, v3 introduces an asynchronous architecture with improved reliability and performance.
+**Langfuse compatibility.** Since 0.4.0 the package writes traces over OpenTelemetry (OTLP) and reads back from the v2/v3 APIs:
+
+| Surface | Requirement |
+|---|---|
+| Tracing | Langfuse Cloud (v3 and v4) and self-hosted **3.22.0+** |
+| Scores (write and read) | Langfuse Cloud (v3 and v4) and self-hosted v3+ |
+| Observations, metrics and experiments read APIs | **Langfuse v4** |
+
+Langfuse Cloud removes the deprecated ingestion and read endpoints on **2026-11-16**. Upgrading to 0.4.0 before that date is required; see the [upgrade guide](docs/upgrade-to-0.4.md).
 
 ```bash
 composer require axyr/laravel-langfuse
@@ -82,15 +92,16 @@ Full documentation in the [`docs/`](docs/README.md) directory:
 - [Tracing](docs/tracing.md) - traces, updating, nesting observations
 - [Generations](docs/generations.md) - LLM generation tracking, usage and cost
 - [Spans and Events](docs/spans-and-events.md) - non-LLM work, event logging
-- [Scores](docs/scores.md) - numeric, boolean, categorical scores
+- [Scores](docs/scores.md) - numeric, boolean, categorical, text and correction scores
 - [Prompt Management](docs/prompt-management.md) - fetch, cache, compile, create
-- [Querying (read API)](docs/querying.md) - read scores/observations, metrics, and the evaluation workflow
+- [Querying (read API)](docs/querying.md) - read scores/observations, metrics, and the experiment workflow
 - [Integrations](docs/integrations/prism.md) - Prism, Laravel AI, Neuron AI
 - [Middleware](docs/middleware.md) - request trace context
 - [Batching and Flushing](docs/batching-and-flushing.md) - flush control, queued dispatch
 - [Testing](docs/testing.md) - fakes and assertions
 - [Architecture](docs/architecture.md) - system diagram, Octane compatibility
-- [Troubleshooting](docs/troubleshooting.md) - Langfuse v3 compatibility, common issues
+- [Troubleshooting](docs/troubleshooting.md) - Langfuse v4 tracing, common issues
+- [Upgrading to 0.4](docs/upgrade-to-0.4.md) - what changed for Langfuse v4 and what you need to do
 
 See the [Changelog](CHANGELOG.md) for release history.
 

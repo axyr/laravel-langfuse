@@ -2,18 +2,15 @@
 
 declare(strict_types=1);
 
-use Axyr\Langfuse\Cache\PromptCache;
 use Axyr\Langfuse\Config\LangfuseConfig;
-use Axyr\Langfuse\Contracts\PromptApiClientInterface;
-use Axyr\Langfuse\Contracts\ScoreApiClientInterface;
-use Axyr\Langfuse\Dto\IngestionEvent;
 use Axyr\Langfuse\Dto\TextPrompt;
-use Axyr\Langfuse\LangfuseClient;
+use Axyr\Langfuse\Dto\TraceBody;
+use Axyr\Langfuse\Objects\LangfuseGeneration;
+use Axyr\Langfuse\Objects\LangfuseTrace;
 use Axyr\Langfuse\Objects\NullLangfuseTrace;
 use Axyr\Langfuse\Prism\TracingProvider;
 use Axyr\Langfuse\Prompt\CurrentPromptRegistry;
-use Axyr\Langfuse\Prompt\PromptManager;
-use Axyr\Langfuse\Testing\RecordingEventBatcher;
+use Axyr\Langfuse\Testing\LangfuseFake;
 use Prism\Prism\Enums\FinishReason;
 use Prism\Prism\Providers\Provider;
 use Prism\Prism\Streaming\Events\StreamEndEvent;
@@ -24,31 +21,28 @@ use Prism\Prism\Text\Step;
 use Prism\Prism\ValueObjects\Meta;
 use Prism\Prism\ValueObjects\Usage as PrismUsage;
 
-function makeTracingClient(): array
+function makeTracingClient(): LangfuseFake
 {
-    $batcher = new RecordingEventBatcher();
-
-    $config = new LangfuseConfig(publicKey: 'pk', secretKey: 'sk');
-    $promptApiClient = Mockery::mock(PromptApiClientInterface::class);
-    $promptManager = new PromptManager(
-        $promptApiClient,
-        new PromptCache(),
+    return new LangfuseFake(
+        new CurrentPromptRegistry(),
+        new LangfuseConfig(publicKey: 'pk', secretKey: 'sk'),
     );
+}
 
-    $client = new LangfuseClient(
-        $batcher,
-        $config,
-        $promptManager,
-        Mockery::mock(ScoreApiClientInterface::class),
-        $promptApiClient,
-        Mockery::mock(\Axyr\Langfuse\Contracts\ObservationApiClientInterface::class),
-        Mockery::mock(\Axyr\Langfuse\Contracts\MetricsApiClientInterface::class),
-        Mockery::mock(\Axyr\Langfuse\Contracts\DatasetApiClientInterface::class),
-        Mockery::mock(\Axyr\Langfuse\Contracts\DatasetItemApiClientInterface::class),
-        Mockery::mock(\Axyr\Langfuse\Contracts\DatasetRunApiClientInterface::class),
-    );
+/**
+ * @return array<int, array<string, mixed>>
+ */
+function prismTraceBodies(LangfuseFake $fake): array
+{
+    return array_map(fn(LangfuseTrace $trace): array => $trace->getBody()->toArray(), $fake->traces());
+}
 
-    return [$client, $batcher];
+/**
+ * @return array<int, array<string, mixed>>
+ */
+function prismGenerationBodies(LangfuseFake $fake): array
+{
+    return array_map(fn(LangfuseGeneration $g): array => $g->getBody()->toArray(), $fake->generations());
 }
 
 function makeTextRequest(string $model = 'gpt-4', string $provider = 'openai'): TextRequest
@@ -100,39 +94,37 @@ function makeTextResponse(string $text = 'Hello world'): TextResponse
     );
 }
 
-it('traces text generation', function () {
-    [$langfuse, $batcher] = makeTracingClient();
+it('traces text generation and ends the trace it owns', function () {
+    $fake = makeTracingClient();
 
     $innerProvider = Mockery::mock(Provider::class);
     $innerProvider->shouldReceive('text')
         ->once()
         ->andReturn(makeTextResponse('Generated text'));
 
-    $provider = new TracingProvider($innerProvider, $langfuse);
+    $provider = new TracingProvider($innerProvider, $fake);
     $response = $provider->text(makeTextRequest());
 
-    expect($response->text)->toBe('Generated text')
-        ->and($batcher->events())->toHaveCount(3); // trace-create, generation-create, generation-update
+    expect($response->text)->toBe('Generated text');
 
-    $types = array_map(fn(IngestionEvent $e) => $e->type->value, $batcher->events());
-    expect($types)->toContain('trace-create')
-        ->and($types)->toContain('generation-create')
-        ->and($types)->toContain('generation-update');
+    $fake->assertTraceCreated()
+        ->assertTraceEnded()
+        ->assertGenerationEnded()
+        ->assertEventCount(2);
+
+    expect(prismTraceBodies($fake)[0]['output'])->toBe('Generated text')
+        ->and($fake->currentTrace())->toBeInstanceOf(NullLangfuseTrace::class);
 });
 
 it('captures usage data in generation', function () {
-    [$langfuse, $batcher] = makeTracingClient();
+    $fake = makeTracingClient();
 
     $innerProvider = Mockery::mock(Provider::class);
-    $innerProvider->shouldReceive('text')
-        ->once()
-        ->andReturn(makeTextResponse());
+    $innerProvider->shouldReceive('text')->once()->andReturn(makeTextResponse());
 
-    $provider = new TracingProvider($innerProvider, $langfuse);
-    $provider->text(makeTextRequest());
+    (new TracingProvider($innerProvider, $fake))->text(makeTextRequest());
 
-    $updateEvent = collect($batcher->events())->first(fn(IngestionEvent $e) => $e->type->value === 'generation-update');
-    $body = $updateEvent->body->toArray();
+    $body = prismGenerationBodies($fake)[0];
 
     expect($body)->toHaveKey('usage')
         ->and($body['usage']['input'])->toBe(10)
@@ -141,31 +133,23 @@ it('captures usage data in generation', function () {
 });
 
 it('captures model name in generation', function () {
-    [$langfuse, $batcher] = makeTracingClient();
+    $fake = makeTracingClient();
 
     $innerProvider = Mockery::mock(Provider::class);
-    $innerProvider->shouldReceive('text')
-        ->once()
-        ->andReturn(makeTextResponse());
+    $innerProvider->shouldReceive('text')->once()->andReturn(makeTextResponse());
 
-    $provider = new TracingProvider($innerProvider, $langfuse);
-    $provider->text(makeTextRequest('claude-3-opus', 'anthropic'));
+    (new TracingProvider($innerProvider, $fake))->text(makeTextRequest('claude-3-opus', 'anthropic'));
 
-    $createEvent = collect($batcher->events())->first(fn(IngestionEvent $e) => $e->type->value === 'generation-create');
-    $body = $createEvent->body->toArray();
-
-    expect($body['model'])->toBe('claude-3-opus');
+    expect(prismGenerationBodies($fake)[0]['model'])->toBe('claude-3-opus');
 });
 
 it('records error on text generation failure', function () {
-    [$langfuse, $batcher] = makeTracingClient();
+    $fake = makeTracingClient();
 
     $innerProvider = Mockery::mock(Provider::class);
-    $innerProvider->shouldReceive('text')
-        ->once()
-        ->andThrow(new RuntimeException('API Error'));
+    $innerProvider->shouldReceive('text')->once()->andThrow(new RuntimeException('API Error'));
 
-    $provider = new TracingProvider($innerProvider, $langfuse);
+    $provider = new TracingProvider($innerProvider, $fake);
 
     try {
         $provider->text(makeTextRequest());
@@ -173,31 +157,30 @@ it('records error on text generation failure', function () {
         // expected
     }
 
-    expect($batcher->events())->toHaveCount(3);
+    $fake->assertEventCount(2);
 
-    $updateEvent = collect($batcher->events())->first(fn(IngestionEvent $e) => $e->type->value === 'generation-update');
-    $body = $updateEvent->body->toArray();
+    $body = prismGenerationBodies($fake)[0];
 
     expect($body['level'])->toBe('ERROR')
-        ->and($body['statusMessage'])->toBe('API Error');
+        ->and($body['statusMessage'])->toBe('API Error')
+        ->and(prismTraceBodies($fake)[0]['metadata']['error'])->toBe('API Error')
+        ->and($fake->traces()[0]->hasEnded())->toBeTrue();
 });
 
 it('re-throws exceptions after recording', function () {
-    [$langfuse] = makeTracingClient();
+    $fake = makeTracingClient();
 
     $innerProvider = Mockery::mock(Provider::class);
-    $innerProvider->shouldReceive('text')
-        ->once()
-        ->andThrow(new RuntimeException('API Error'));
+    $innerProvider->shouldReceive('text')->once()->andThrow(new RuntimeException('API Error'));
 
-    $provider = new TracingProvider($innerProvider, $langfuse);
+    $provider = new TracingProvider($innerProvider, $fake);
 
     expect(fn() => $provider->text(makeTextRequest()))
         ->toThrow(RuntimeException::class, 'API Error');
 });
 
 it('traces streaming generation', function () {
-    [$langfuse, $batcher] = makeTracingClient();
+    $fake = makeTracingClient();
 
     $innerProvider = Mockery::mock(Provider::class);
     $innerProvider->shouldReceive('stream')
@@ -213,31 +196,29 @@ it('traces streaming generation', function () {
             );
         });
 
-    $provider = new TracingProvider($innerProvider, $langfuse);
-    $generator = $provider->stream(makeTextRequest());
+    $provider = new TracingProvider($innerProvider, $fake);
 
     $streamEvents = [];
-    foreach ($generator as $event) {
+    foreach ($provider->stream(makeTextRequest()) as $event) {
         $streamEvents[] = $event;
     }
 
-    expect($streamEvents)->toHaveCount(3)
-        ->and($batcher->events())->toHaveCount(3);
+    expect($streamEvents)->toHaveCount(3);
 
-    $updateEvent = collect($batcher->events())->first(fn(IngestionEvent $e) => $e->type->value === 'generation-update');
-    $body = $updateEvent->body->toArray();
+    $fake->assertEventCount(2);
+
+    $body = prismGenerationBodies($fake)[0];
 
     expect($body['usage']['input'])->toBe(5)
-        ->and($body['usage']['output'])->toBe(10);
+        ->and($body['usage']['output'])->toBe(10)
+        ->and($body['output'])->toBe('Hello world');
 });
 
 it('captures model parameters', function () {
-    [$langfuse, $batcher] = makeTracingClient();
+    $fake = makeTracingClient();
 
     $innerProvider = Mockery::mock(Provider::class);
-    $innerProvider->shouldReceive('text')
-        ->once()
-        ->andReturn(makeTextResponse());
+    $innerProvider->shouldReceive('text')->once()->andReturn(makeTextResponse());
 
     $request = new TextRequest(
         model: 'gpt-4',
@@ -255,13 +236,9 @@ it('captures model parameters', function () {
         toolChoice: null,
     );
 
-    $provider = new TracingProvider($innerProvider, $langfuse);
-    $provider->text($request);
+    (new TracingProvider($innerProvider, $fake))->text($request);
 
-    $createEvent = collect($batcher->events())->first(fn(IngestionEvent $e) => $e->type->value === 'generation-create');
-    $body = $createEvent->body->toArray();
-
-    expect($body['modelParameters'])->toBe([
+    expect(prismGenerationBodies($fake)[0]['modelParameters'])->toBe([
         'temperature' => 0.5,
         'maxTokens' => 200,
         'topP' => 0.9,
@@ -269,7 +246,7 @@ it('captures model parameters', function () {
 });
 
 it('passes through stream events unmodified', function () {
-    [$langfuse] = makeTracingClient();
+    $fake = makeTracingClient();
 
     $innerProvider = Mockery::mock(Provider::class);
     $innerProvider->shouldReceive('stream')
@@ -283,7 +260,7 @@ it('passes through stream events unmodified', function () {
             );
         });
 
-    $provider = new TracingProvider($innerProvider, $langfuse);
+    $provider = new TracingProvider($innerProvider, $fake);
     $streamEvents = iterator_to_array($provider->stream(makeTextRequest()));
 
     expect($streamEvents[0])->toBeInstanceOf(TextDeltaEvent::class)
@@ -291,53 +268,57 @@ it('passes through stream events unmodified', function () {
         ->and($streamEvents[1])->toBeInstanceOf(StreamEndEvent::class);
 });
 
-it('reuses existing trace across multiple calls', function () {
-    [$langfuse, $batcher] = makeTracingClient();
+it('reuses an adopted trace across multiple calls and leaves it open', function () {
+    $fake = makeTracingClient();
 
     $innerProvider = Mockery::mock(Provider::class);
-    $innerProvider->shouldReceive('text')
-        ->twice()
-        ->andReturn(makeTextResponse());
+    $innerProvider->shouldReceive('text')->twice()->andReturn(makeTextResponse());
 
-    $provider = new TracingProvider($innerProvider, $langfuse);
+    $trace = $fake->trace(new TraceBody(name: 'workflow'));
+    $fake->setCurrentTrace($trace);
 
-    // First call creates a trace
+    $provider = new TracingProvider($innerProvider, $fake);
+    $provider->text(makeTextRequest());
     $provider->text(makeTextRequest());
 
-    // Second call should reuse the same trace
-    $provider->text(makeTextRequest());
+    expect($fake->traces())->toHaveCount(1)
+        ->and($fake->generations())->toHaveCount(2)
+        ->and($trace->hasEnded())->toBeFalse();
 
-    $traceEvents = collect($batcher->events())->filter(fn(IngestionEvent $e) => $e->type->value === 'trace-create');
-    $generationEvents = collect($batcher->events())->filter(fn(IngestionEvent $e) => $e->type->value === 'generation-create');
-
-    // Only 1 trace created, but 2 generations
-    expect($traceEvents)->toHaveCount(1)
-        ->and($generationEvents)->toHaveCount(2);
-
-    // Both generations should reference the same trace
-    $traceId = $traceEvents->first()->body->toArray()['id'];
-    $genTraceIds = $generationEvents->map(fn(IngestionEvent $e) => $e->body->toArray()['traceId'])->all();
-
-    expect($genTraceIds)->each->toBe($traceId);
+    foreach (prismGenerationBodies($fake) as $body) {
+        expect($body['traceId'])->toBe($trace->getId());
+    }
 });
 
-it('creates new trace when no current trace exists', function () {
-    [$langfuse, $batcher] = makeTracingClient();
+it('owns one trace per call when there is no current trace', function () {
+    $fake = makeTracingClient();
 
     $innerProvider = Mockery::mock(Provider::class);
-    $innerProvider->shouldReceive('text')
-        ->once()
-        ->andReturn(makeTextResponse());
+    $innerProvider->shouldReceive('text')->twice()->andReturn(makeTextResponse());
 
-    $provider = new TracingProvider($innerProvider, $langfuse);
+    $provider = new TracingProvider($innerProvider, $fake);
+    $provider->text(makeTextRequest());
     $provider->text(makeTextRequest());
 
-    // Should have set current trace on the client
-    expect($langfuse->currentTrace())->not->toBeInstanceOf(NullLangfuseTrace::class);
+    expect($fake->traces())->toHaveCount(2)
+        ->and($fake->traces()[0]->hasEnded())->toBeTrue()
+        ->and($fake->traces()[1]->hasEnded())->toBeTrue();
+});
+
+it('sets the current trace while the call is in flight', function () {
+    $fake = makeTracingClient();
+
+    $innerProvider = Mockery::mock(Provider::class);
+    $innerProvider->shouldReceive('text')->once()->andReturn(makeTextResponse());
+
+    (new TracingProvider($innerProvider, $fake))->text(makeTextRequest());
+
+    expect($fake->traces())->toHaveCount(1)
+        ->and(prismTraceBodies($fake)[0]['name'])->toStartWith('prism-');
 });
 
 it('delegates embeddings to inner provider', function () {
-    [$langfuse, $batcher] = makeTracingClient();
+    $fake = makeTracingClient();
 
     $embeddingsResponse = new \Prism\Prism\Embeddings\Response(
         embeddings: [],
@@ -346,20 +327,18 @@ it('delegates embeddings to inner provider', function () {
     );
 
     $innerProvider = Mockery::mock(Provider::class);
-    $innerProvider->shouldReceive('embeddings')
-        ->once()
-        ->andReturn($embeddingsResponse);
+    $innerProvider->shouldReceive('embeddings')->once()->andReturn($embeddingsResponse);
 
-    $provider = new TracingProvider($innerProvider, $langfuse);
-    $request = Mockery::mock(\Prism\Prism\Embeddings\Request::class);
-    $response = $provider->embeddings($request);
+    $provider = new TracingProvider($innerProvider, $fake);
+    $response = $provider->embeddings(Mockery::mock(\Prism\Prism\Embeddings\Request::class));
 
-    expect($response)->toBe($embeddingsResponse)
-        ->and($batcher->events())->toBeEmpty();
+    expect($response)->toBe($embeddingsResponse);
+
+    $fake->assertNothingSent();
 });
 
 it('delegates images to inner provider', function () {
-    [$langfuse, $batcher] = makeTracingClient();
+    $fake = makeTracingClient();
 
     $imagesResponse = new \Prism\Prism\Images\Response(
         images: [],
@@ -368,52 +347,32 @@ it('delegates images to inner provider', function () {
     );
 
     $innerProvider = Mockery::mock(Provider::class);
-    $innerProvider->shouldReceive('images')
-        ->once()
-        ->andReturn($imagesResponse);
+    $innerProvider->shouldReceive('images')->once()->andReturn($imagesResponse);
 
-    $provider = new TracingProvider($innerProvider, $langfuse);
-    $request = Mockery::mock(\Prism\Prism\Images\Request::class);
-    $response = $provider->images($request);
+    $provider = new TracingProvider($innerProvider, $fake);
+    $response = $provider->images(Mockery::mock(\Prism\Prism\Images\Request::class));
 
-    expect($response)->toBe($imagesResponse)
-        ->and($batcher->events())->toBeEmpty();
+    expect($response)->toBe($imagesResponse);
+
+    $fake->assertNothingSent();
 });
 
 it('links the registered managed prompt to the generation', function () {
-    [$langfuse, $batcher] = makeTracingClient();
+    $fake = makeTracingClient();
     $registry = new CurrentPromptRegistry();
     $registry->set(new TextPrompt(name: 'movie-critic', version: 7, prompt: 'text'));
 
     $innerProvider = Mockery::mock(Provider::class);
     $innerProvider->shouldReceive('text')->twice()->andReturn(makeTextResponse());
 
-    $provider = new TracingProvider($innerProvider, $langfuse, $registry);
+    $provider = new TracingProvider($innerProvider, $fake, $registry);
     $provider->text(makeTextRequest());
     $provider->text(makeTextRequest());
 
-    $bodies = array_map(fn(IngestionEvent $e) => $e->toArray()['body'], $batcher->eventsOfType('generation-create'));
+    $bodies = prismGenerationBodies($fake);
 
     expect($bodies[0]['promptName'])->toBe('movie-critic')
         ->and($bodies[0]['promptVersion'])->toBe(7)
         ->and($bodies[1])->not->toHaveKey('promptName')
-        ->and($registry->current())->toBeNull();
-});
-
-it('links the registered managed prompt to a failed generation', function () {
-    [$langfuse, $batcher] = makeTracingClient();
-    $registry = new CurrentPromptRegistry();
-    $registry->set(new TextPrompt(name: 'movie-critic', version: 7, prompt: 'text'));
-
-    $innerProvider = Mockery::mock(Provider::class);
-    $innerProvider->shouldReceive('text')->once()->andThrow(new RuntimeException('API Error'));
-
-    $provider = new TracingProvider($innerProvider, $langfuse, $registry);
-
-    expect(fn() => $provider->text(makeTextRequest()))->toThrow(RuntimeException::class);
-
-    $body = $batcher->eventsOfType('generation-create')[0]->toArray()['body'];
-
-    expect($body['promptName'])->toBe('movie-critic')
         ->and($registry->current())->toBeNull();
 });

@@ -179,6 +179,7 @@ class TracingProvider extends Provider
     ): void {
         $endTime = microtime(true);
 
+        $owned = $this->langfuse->currentTrace() instanceof NullLangfuseTrace;
         $trace = $this->createTrace($request);
 
         $generation = $trace->generation(
@@ -191,6 +192,10 @@ class TracingProvider extends Provider
             usage: $this->mapUsage($usage),
             statusMessage: $finishReason,
         );
+
+        if ($owned) {
+            $this->endOwnedTrace($trace, $this->formatTime($endTime), $output);
+        }
     }
 
     private function recordGenerationError(
@@ -201,6 +206,7 @@ class TracingProvider extends Provider
     ): void {
         $endTime = microtime(true);
 
+        $owned = $this->langfuse->currentTrace() instanceof NullLangfuseTrace;
         $trace = $this->createTrace($request, ['error' => $e->getMessage()]);
 
         $generation = $trace->generation(
@@ -212,6 +218,21 @@ class TracingProvider extends Provider
             statusMessage: $e->getMessage(),
             level: ObservationLevel::ERROR,
         );
+
+        if ($owned) {
+            $this->endOwnedTrace($trace, $this->formatTime($endTime), null);
+        }
+    }
+
+    /**
+     * Prism owns the whole unit of work when it created the trace itself, so the
+     * root observation is ended here rather than waiting for the terminate hook.
+     */
+    private function endOwnedTrace(\Axyr\Langfuse\Objects\LangfuseTrace $trace, string $endTime, mixed $output): void
+    {
+        $trace->end(endTime: $endTime, output: $output);
+
+        $this->langfuse->setCurrentTrace(new NullLangfuseTrace());
     }
 
     private function buildGenerationBody(TextRequest|StructuredRequest $request, float $startTime): GenerationBody

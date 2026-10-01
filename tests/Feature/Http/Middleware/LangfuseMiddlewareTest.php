@@ -79,11 +79,24 @@ it('includes metadata in trace', function () {
 
     $middleware->handle($request, fn() => new Response('OK'));
 
-    $traceEvent = collect($fake->events())->first(fn($e) => $e->type->value === 'trace-create');
-    $body = $traceEvent->body->toArray();
+    $body = $fake->traces()[0]->getBody()->toArray();
 
     expect($body['metadata'])->toHaveKey('method')
         ->and($body['metadata']['method'])->toBe('POST')
         ->and($body['metadata'])->toHaveKey('source')
         ->and($body['metadata']['source'])->toBe('langfuse-middleware');
+});
+
+it('ends the root observation once the response is ready', function () {
+    $fake = Langfuse::fake();
+
+    $middleware = app(LangfuseMiddleware::class);
+    $request = Request::create('/api/chat', 'POST');
+
+    $middleware->handle($request, fn() => new Response('OK', 201));
+
+    $fake->assertTraceEnded('POST api/chat');
+
+    expect($fake->traces()[0]->getBody()->output)->toBe(['status' => 201])
+        ->and($fake->observations())->toHaveCount(1);
 });

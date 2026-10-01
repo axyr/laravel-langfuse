@@ -12,7 +12,7 @@ it('creates a list response with a cursor from array', function () {
 
     expect($response->data)->toHaveCount(1)
         ->and($response->data[0])->toBeInstanceOf(ObservationResponse::class)
-        ->and($response->data[0]->id)->toBe('obs-2')
+        ->and($response->data[0]->id)->toBe('bbbbbbbbbbbbbbbb')
         ->and($response->meta)->toBeInstanceOf(ObservationListMeta::class)
         ->and($response->meta->cursor)->toBe('eyJpZCI6Im9icy0yIn0=');
 });

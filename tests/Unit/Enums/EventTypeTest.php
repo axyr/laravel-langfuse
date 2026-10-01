@@ -4,23 +4,20 @@ declare(strict_types=1);
 
 use Axyr\Langfuse\Enums\EventType;
 
-it('has 7 cases', function () {
-    expect(EventType::cases())->toHaveCount(7);
+it('only carries the score-create event, the one type v4 still ingests', function () {
+    expect(EventType::cases())->toBe([EventType::ScoreCreate]);
 });
 
-it('has correct values', function (EventType $case, string $expected) {
-    expect($case->value)->toBe($expected);
-})->with([
-    [EventType::TraceCreate, 'trace-create'],
-    [EventType::SpanCreate, 'span-create'],
-    [EventType::SpanUpdate, 'span-update'],
-    [EventType::GenerationCreate, 'generation-create'],
-    [EventType::GenerationUpdate, 'generation-update'],
-    [EventType::EventCreate, 'event-create'],
-    [EventType::ScoreCreate, 'score-create'],
-]);
+it('has correct values', function () {
+    expect(EventType::ScoreCreate->value)->toBe('score-create');
+});
 
 it('can be created from string value', function () {
-    expect(EventType::from('trace-create'))->toBe(EventType::TraceCreate);
-    expect(EventType::from('generation-create'))->toBe(EventType::GenerationCreate);
+    expect(EventType::from('score-create'))->toBe(EventType::ScoreCreate);
+});
+
+it('no longer resolves the observation event types', function () {
+    expect(EventType::tryFrom('trace-create'))->toBeNull()
+        ->and(EventType::tryFrom('generation-create'))->toBeNull()
+        ->and(EventType::tryFrom('span-update'))->toBeNull();
 });

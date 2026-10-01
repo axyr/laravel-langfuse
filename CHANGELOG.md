@@ -5,6 +5,125 @@ All notable changes to `axyr/laravel-langfuse` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-09-10
+
+Langfuse v4. Tracing moves to the OpenTelemetry endpoint and the read APIs move to
+their current versions. **Langfuse Cloud removes every deprecated endpoint on
+2026-11-16**, so this release is required to keep sending data after that date.
+See [docs/upgrade-to-0.4.md](docs/upgrade-to-0.4.md) for the migration guide.
+
+Compatibility: Langfuse Cloud (v3 and v4) and self-hosted 3.22.0+ for tracing and
+scores; **Langfuse v4** for the observations, metrics and experiments read APIs.
+
+### Changed
+
+- **OTLP ingestion** - traces, spans, generations and events are posted to
+  `POST /api/public/otel/v1/traces` as OTLP/JSON with the
+  `x-langfuse-ingestion-version: 4` header. Scores stay on
+  `POST /api/public/ingestion` as `score-create` events, which v4 keeps supporting.
+- **Export once** - v4 is append-only, so an observation is assembled in memory and
+  exported exactly once, when it ends. Creating a trace, span or generation sends
+  nothing; `end()` does. `update()` folds fields into the in-memory trace instead of
+  emitting a second event, keeping fields the update leaves `null` and merging
+  metadata key by key. A second `end()`, or an `update()` after `end()`, is ignored
+  and logs a warning.
+- **`end()` and `shutdown()`** - `LangfuseTrace::end(?string $endTime, mixed $output)`
+  exports the trace's root observation. `Langfuse::shutdown()` ends every observation
+  that is still open and flushes; the application terminate hook calls it, so HTTP
+  requests keep working unchanged. Observations ended by the shutdown hook are marked
+  `WARNING` with the status message `ended by shutdown`. Long-running processes -
+  queue workers, Octane, CLI commands - should call `shutdown()` themselves.
+- **Hex IDs** - trace IDs are 32 lowercase hex characters and observation IDs 16, as
+  OpenTelemetry requires. A custom `id` is normalised into that shape once, so the
+  same input always yields the same ID and existing call sites keep working;
+  `getId()` can therefore differ from what was passed in. New
+  `LangfuseTrace::getRootObservationId()`.
+- **Trace-level attributes on every span** - name, user, session, tags, metadata,
+  release, version, environment and `public` are copied onto every observation of the
+  trace when the batch is serialised, which is what the v4 observations and metrics
+  filters read. Values set on the trace after a child ended are still picked up.
+- **Hierarchy** - observations created from a trace now nest under the trace's root
+  observation instead of becoming additional roots.
+- **`flush_at` semantics** - `LANGFUSE_FLUSH_AT` counts completed observations and
+  scores, not raw events. A trace with one generation is 2 items, not 3.
+- **Observation reads** - `getObservation()` uses `GET /api/public/v2/observations`
+  with an `id` filter and gained `$fromStartTime`, `$toStartTime` and `$fields`
+  arguments; without a window it looks back 30 days. `ObservationResponse` gained the
+  v2 field groups (`isRootObservation`, `userId`, `sessionId`, `traceName`, `tags`,
+  `release`, `totalCost`, `timeToFirstToken`, `promptId`, and more).
+- **Metrics** - `queryMetrics()` targets `GET /api/public/v2/metrics`. The `traces`
+  view is gone; use `observations` filtered or grouped on `isRootObservation`.
+  `MetricQuery` validates the view at construction.
+- **Score reads** - `getScore()` and `getScores()` use `GET /api/public/v3/scores`:
+  cursor pagination, comma-separated list filters, polymorphic `value`, and a
+  `subject` describing what the score is attached to.
+- **Score writes** - `value` accepts `float|bool|string`; string scores go into
+  `value` because v4 has no `stringValue` on the wire (the `stringValue` argument is
+  kept and mapped for you). `Langfuse::score()` and `LangfuseTrace::score()` take a
+  second `?string $timestamp` argument, the ingestion envelope timestamp that decides
+  whether a score overwrites an earlier one.
+- **Queue jobs** - `SendIngestionBatchJob` now carries scores only and gained a retry
+  policy; the new `SendOtelBatchJob` carries observations.
+- **Fake assertions** - `assertEventCount()` counts what a flush would send
+  (exported observations plus queued scores), so there is no create/update double
+  counting and an observation that never ended is not counted.
+
+### Added
+
+- `Axyr\Langfuse\Version` with `SDK_NAME`, `SDK_LANGUAGE` and `SDK_VERSION`,
+  reported as the OTLP resource attributes, the instrumentation scope and the score
+  batch metadata.
+- **Experiments** - `listExperiments()`, `getExperiment()` and
+  `listExperimentItems()` on `GET /api/public/experiments` and
+  `/api/public/experiment-items`, with `ExperimentQuery`, `ExperimentItemQuery`,
+  `ExperimentResponse`, `ExperimentListResponse`, `ExperimentItemResponse` and
+  `ExperimentItemListResponse`. On the write side, `ExperimentContext`,
+  `ExperimentItemContext` and `TraceBody::forExperimentItem()` turn a trace into an
+  experiment item.
+- **Observation types** - `ObservationType` enum (`agent`, `tool`, `chain`,
+  `retriever`, `evaluator`, `embedding`, `guardrail` next to span, generation and
+  event) and a `type` override on `SpanBody`. The Laravel AI and Neuron AI
+  integrations mark their tool spans as `tool`, and Neuron AI's RAG spans as
+  `retriever`.
+- **Usage details** - `Usage::$details` and `Usage::$costDetails` carry arbitrary
+  usage and cost keys (cached tokens, reasoning tokens) next to `input`, `output`
+  and `total`.
+- `ScoreBody::$datasetRunId` (the experiment ID), `$metadata` and `$queueId`;
+  `ScoreDataType::TEXT` and `ScoreDataType::CORRECTION`.
+- `ObservationQuery::$sessionId`, `$isRootObservation` and `ObservationQuery::idFilter()`.
+- New config keys: `LANGFUSE_SERVICE_NAME` (the OpenTelemetry `service.name`),
+  `LANGFUSE_COMPRESSION` (gzip the OTLP body, off by default) and `LANGFUSE_RELEASE`
+  (default release for traces that do not set one).
+- New fake assertions and accessors: `assertTraceEnded()`, `assertSpanEnded()`,
+  `assertGenerationEnded()`, `assertObservationHas()`,
+  `assertExperimentItemTraced()`, `traces()`, `spans()`, `generations()`,
+  `observations()`, `scores()`, `exported()`, `withExperiment()`,
+  `withExperimentItem()`. `Langfuse::fake()` now applies environment and trace
+  context stamping the same way the real client does.
+- Batches are split so each OTLP request stays below 4 MB, under the 5 MB server
+  limit.
+
+### Removed
+
+- Legacy ingestion for observations. `EventType` keeps only `ScoreCreate`;
+  `IngestionEvent`, `IngestionBatch` and `IngestionResponse` now serve scores only.
+- `Langfuse::getDatasetRun()`, `listDatasetRuns()`, `deleteDatasetRun()`,
+  `createDatasetRunItem()` and `listDatasetRunItems()`, together with
+  `DatasetRunApiClient`, `DatasetRunResponse`, `DatasetRunListResponse`,
+  `DatasetRunWithItemsResponse`, `DatasetRunItemResponse`,
+  `DatasetRunItemListResponse` and `CreateDatasetRunItemBody`. v4 has no endpoint
+  that deletes an experiment; the manual path is `DELETE /api/public/traces` with the
+  item trace IDs, which is rate limited to 50 requests per day on Hobby.
+- `ScoreTraceData` and the `ScoreResponse` fields it fed (`traceId`, `sessionId`,
+  `observationId`, `datasetRunId`, `trace`, `stringValue`), replaced by `subject`
+  and the `traceId()`, `observationId()`, `sessionId()` and `experimentId()`
+  accessors.
+- `Usage::$unit` - v4 has no usage unit.
+- `LangfuseConfig::batchMetadata()`, `observationsUrl()`, `metricsUrl()`,
+  `scoresV2Url()`, `datasetRunsUrl()` and `datasetRunItemsUrl()`.
+- `RecordingEventBatcher::events()` and `eventsOfType()`, replaced by
+  `observations()`, `observationsOfType()` and `scores()`.
+
 ## [0.3.0] - 2026-09-09
 
 ### Added

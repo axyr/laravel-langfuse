@@ -3,8 +3,12 @@
 # Querying (read API)
 
 Read evaluation data back out of Langfuse: scores, observations, metrics, and the
-full datasets → runs → run-items evaluation workflow. Every method here calls the
-Langfuse public REST API (never the database).
+full datasets → experiments → experiment-items evaluation workflow. Every method
+here calls the Langfuse public REST API (never the database).
+
+> **These reads need Langfuse v4.** Observations v2, Metrics v2 and the Experiments
+> API only exist there. Scores v3 also works on Langfuse v3. There is no fallback to
+> the v1 endpoints: Langfuse Cloud removes them on 2026-11-16.
 
 All read methods are **resilient**: on a network error or non-2xx response they log a
 warning and return `null`. They never throw into your application, so it is safe to
@@ -20,6 +24,9 @@ Examples use the `Langfuse` facade; the same methods exist on the injected
 
 ## Scores
 
+Reads go to `GET /api/public/v3/scores`, which uses cursor pagination and
+comma-separated list filters.
+
 ```php
 use Axyr\Langfuse\Dto\ScoreQuery;
 
@@ -27,20 +34,19 @@ use Axyr\Langfuse\Dto\ScoreQuery;
 $score = Langfuse::getScore('score-abc');
 
 if ($score !== null) {
-    echo $score->name;        // 'accuracy'
-    echo $score->value;       // 0.95 (float|null)
-    echo $score->dataType;    // 'NUMERIC' | 'BOOLEAN' | 'CATEGORICAL' | 'CORRECTION'
-    echo $score->stringValue; // for boolean/categorical scores
+    echo $score->name;      // 'accuracy'
+    $score->value;          // float|bool|string|null, depending on dataType
+    echo $score->dataType;  // 'NUMERIC' | 'BOOLEAN' | 'CATEGORICAL' | 'TEXT' | 'CORRECTION'
 }
 
 // Many scores, filtered. All ScoreQuery fields are optional.
 $response = Langfuse::getScores(new ScoreQuery(
-    datasetRunId: 'run-789',
-    name: 'accuracy',
-    source: 'EVAL',
-    dataType: 'NUMERIC',
+    experimentId: ['nightly-eval'],
+    name: ['accuracy'],
+    source: ['EVAL'],
+    dataType: ['NUMERIC'],
     fromTimestamp: '2026-01-01T00:00:00Z',
-    page: 1,
+    fields: 'details,subject',
     limit: 50,
 ));
 
@@ -49,48 +55,82 @@ if ($response !== null) {
         // $score is a ScoreResponse
     }
 
-    $response->meta->totalItems; // page-based pagination
-    $response->meta->totalPages;
-    $response->meta->page;
-    $response->meta->limit;
+    // Cursor pagination: the cursor is absent on the last page
+    if ($response->meta->hasMore()) {
+        Langfuse::getScores(new ScoreQuery(cursor: $response->meta->cursor));
+    }
 }
 ```
 
-`ScoreResponse` exposes `id`, `name`, `value`, `stringValue`, `dataType`, `source`,
-`timestamp`, `createdAt`, `updatedAt`, `environment`, `traceId`, `sessionId`,
-`observationId`, `datasetRunId`, `authorUserId`, `comment`, `configId`, `queueId`,
-`metadata`, and (on list results) an optional `trace` (`userId`, `tags`,
-`environment`, `sessionId`).
+`ScoreResponse` exposes `id`, `projectId`, `name`, `value`, `dataType`, `source`,
+`timestamp`, `createdAt`, `updatedAt`, `environment`, plus `comment`, `configId`,
+`metadata` (`fields=details`), `subject` (`fields=subject`) and `authorUserId`,
+`queueId` (`fields=annotation`). `getScore()` requests all three groups.
 
-> `dataType` and `source` are returned as raw strings so values such as
-> `CORRECTION` survive even though they are not part of the write-side
-> `ScoreDataType` enum.
+**`value` is polymorphic** in v3: a number for `NUMERIC`, a real boolean for
+`BOOLEAN`, a string for `CATEGORICAL`, `TEXT` and `CORRECTION`. There is no
+`stringValue`.
+
+**What a score is attached to** lives in `subject` (`kind`, `id`, and `traceId` for
+observation subjects). Convenience accessors keep call sites short:
+
+```php
+$score->traceId();       // trace subjects, and the parent trace of observation subjects
+$score->observationId();
+$score->sessionId();
+$score->experimentId();
+```
+
+Filter rules worth knowing: `traceId`, `sessionId` and `experimentId` are mutually
+exclusive; `observationId` requires `traceId`; `value`, `valueMin` and `valueMax`
+require a single `dataType`; `limit` above 100 returns a 400.
+
+> `dataType` and `source` are returned as raw strings so values the package does not
+> know yet survive.
 
 ## Observations
 
-The single-observation endpoint returns the full view; the list endpoint uses
-**cursor-based** pagination and field-group selection.
+`GET /api/public/v2/observations` uses cursor-based pagination and field-group
+selection. There is no get-by-id route any more: a single observation is an `id`
+filter on the list, which `getObservation()` builds for you.
 
 ```php
 use Axyr\Langfuse\Dto\ObservationQuery;
 
 // A single observation (event, span, or generation)
-$observation = Langfuse::getObservation('obs-1');
+$observation = Langfuse::getObservation(
+    $generation->getId(),
+    fromStartTime: '2026-01-01T00:00:00Z',
+    toStartTime: '2026-01-02T00:00:00Z',
+    fields: 'core,basic,io,usage',
+);
 
 if ($observation !== null) {
-    $observation->type;          // 'GENERATION', 'SPAN', 'EVENT', ...
-    $observation->level;         // ?ObservationLevel enum (DEBUG/DEFAULT/WARNING/ERROR)
-    $observation->model;         // resolved model name
-    $observation->usageDetails;  // ['input' => 10, 'output' => 5, 'total' => 15]
-    $observation->costDetails;   // ['total' => 0.003, ...]
-    $observation->latency;       // seconds
+    $observation->type;              // 'GENERATION', 'SPAN', 'EVENT', 'TOOL', ...
+    $observation->level;             // ?ObservationLevel enum (DEBUG/DEFAULT/WARNING/ERROR)
+    $observation->model;             // resolved model name
+    $observation->usageDetails;      // ['input' => 10, 'output' => 5, 'total' => 15]
+    $observation->costDetails;       // ['total' => 0.003, ...]
+    $observation->latency;           // seconds
+    $observation->isRootObservation; // true for the trace's root span
+    $observation->userId;            // trace-level attributes live on every row in v4
+    $observation->traceName;
 }
+```
 
+**Always pass a time window when you can.** The v4 tables are partitioned by time, so
+a lookup without one scans everything. `getObservation()` falls back to the last 30
+days when you do not pass `fromStartTime`.
+
+```php
 // Many observations with field selection and cursor pagination
 $response = Langfuse::getObservations(new ObservationQuery(
     type: 'GENERATION',
-    traceId: 'trace-123',
-    fields: 'core,basic,usage,model',   // field groups to include
+    traceId: $trace->getId(),
+    sessionId: 'session-abc',
+    isRootObservation: false,
+    fromStartTime: '2026-01-01T00:00:00Z',
+    fields: 'core,basic,usage,model,trace_context',
     limit: 100,
 ));
 
@@ -99,7 +139,6 @@ if ($response !== null) {
         // ObservationResponse
     }
 
-    // Fetch the next page with the returned cursor
     $next = $response->meta->cursor;
     if ($next !== null) {
         Langfuse::getObservations(new ObservationQuery(cursor: $next));
@@ -108,30 +147,42 @@ if ($response !== null) {
 ```
 
 Available `fields` groups: `core`, `basic`, `time`, `io`, `metadata`, `model`,
-`usage`, `prompt`, `metrics`. If omitted, `core` and `basic` are returned.
+`usage`, `prompt`, `metrics`, `trace_context`. If omitted, `core` and `basic` are
+returned. `input` and `output` always come back as raw strings.
+
+v4 adds `AGENT`, `TOOL`, `CHAIN`, `RETRIEVER`, `EVALUATOR`, `EMBEDDING` and
+`GUARDRAIL` to `type`; the package passes them through as strings.
 
 ## Metrics / Query API
 
-`queryMetrics()` runs a structured analytics query. This is the path for
-trace-level analytics - there is no traces-list endpoint. The query targets the v1
-`/api/public/metrics` endpoint, which supports the `traces`, `observations`,
-`scores-numeric`, and `scores-categorical` views.
+`queryMetrics()` runs a structured analytics query against
+`GET /api/public/v2/metrics`.
+
+**The v1 `traces` view is gone.** Trace-level numbers now come from the
+`observations` view filtered - or grouped - on `isRootObservation`, because in v4 a
+trace is the set of rows sharing a trace id and its root observation carries the
+trace-level attributes.
+
+Views: `observations`, `scores-numeric`, `scores-boolean`, `scores-categorical`.
+`MetricQuery` rejects anything else at construction with an
+`InvalidArgumentException`, so a leftover `'traces'` query fails fast with a clear
+message instead of a logged 400.
 
 ```php
 use Axyr\Langfuse\Dto\MetricQuery;
 
 $response = Langfuse::queryMetrics(new MetricQuery(
-    view: 'traces',
+    view: 'observations',
     metrics: [
         ['measure' => 'count', 'aggregation' => 'count'],
     ],
     fromTimestamp: '2026-01-01T00:00:00Z',
     toTimestamp: '2026-02-01T00:00:00Z',
     dimensions: [
-        ['field' => 'name'],
+        ['field' => 'traceName'],
     ],
     filters: [
-        ['column' => 'userId', 'operator' => '=', 'value' => 'u1', 'type' => 'string'],
+        ['column' => 'isRootObservation', 'operator' => '=', 'value' => 'true', 'type' => 'boolean'],
     ],
     timeDimensionGranularity: 'day',   // optional, groups results by time bucket
     orderBy: [
@@ -143,11 +194,27 @@ $response = Langfuse::queryMetrics(new MetricQuery(
 if ($response !== null) {
     foreach ($response->data as $row) {
         // Each row is an associative array of the requested dimensions
-        // and metric values, e.g. ['name' => 'chat', 'count_count' => 42].
+        // and metric values, e.g. ['traceName' => 'chat', 'count_count' => 42].
         // Histogram measures return [lower, upper, height] tuples.
     }
 }
 ```
+
+New observation dimensions in v2: `tags`, `release`, `isRootObservation`,
+`startTimeMonth`, `providedModelName`, `promptName`, `promptVersion`, alongside the
+backwards-compatible `traceName`, `traceRelease` and `traceVersion`.
+
+**High-cardinality dimensions return a 400 when used for grouping**: `id`, `traceId`,
+`userId`, `sessionId`, `parentObservationId` on the observations view, and `id`,
+`traceId`, `userId`, `sessionId`, `observationId` on the score views. They stay
+usable in filters.
+
+Aggregations: `sum`, `avg`, `count`, `max`, `min`, `p50`, `p75`, `p90`, `p95`, `p99`,
+`histogram`. Granularities: `auto`, `minute`, `hour`, `day`, `week`, `month`.
+
+> **Rate limit.** Metrics v2 on Langfuse Cloud is 100 requests per **day** on Hobby,
+> 100 per hour on Core and 500 per hour on Pro and up. Call it once per run and
+> snapshot the result; do not poll it.
 
 ## Datasets
 
@@ -193,84 +260,165 @@ $created = Langfuse::createDatasetItem(new CreateDatasetItemBody(
 Langfuse::deleteDatasetItem('di-1'); // returns bool
 ```
 
-## Dataset runs and run items
+## Experiments
 
-A run groups the results of executing your pipeline over a dataset. Each run item
-links one dataset item to the trace (and optionally observation) produced for it.
+Experiments replace dataset runs in v4. There is no "create experiment" call and no
+`dataset-run-items` endpoint: **an experiment is created implicitly by tracing**.
+Attach an `ExperimentContext` to the trace of each item and Langfuse assembles the
+experiment from the attributes those traces carry.
+
+### Writing an experiment item
 
 ```php
-use Axyr\Langfuse\Dto\CreateDatasetRunItemBody;
+use Axyr\Langfuse\Dto\ExperimentContext;
+use Axyr\Langfuse\Dto\ExperimentItemContext;
+use Axyr\Langfuse\Dto\TraceBody;
 
-// Link a produced trace to a dataset item in a run (creates the run if needed)
-Langfuse::createDatasetRunItem(new CreateDatasetRunItemBody(
-    runName: 'run-2026-01',
-    datasetItemId: 'di-1',
+$experiment = ExperimentContext::named('run-2026-01', datasetId: 'ds-1');
+
+$trace = Langfuse::trace((new TraceBody(
+    name: 'qa-eval',
+    input: $item->input,
+    environment: 'experiment',
+))->forExperimentItem($experiment, new ExperimentItemContext(
+    itemId: $item->id,
+    expectedOutput: $item->expectedOutput,
+)));
+
+// ... run the pipeline, traced ...
+
+$trace->end(output: $answer);
+```
+
+Both the experiment `id` and `name` must be unique per experiment;
+`ExperimentContext::named()` derives the id from the name for you, or pass both
+explicitly with the constructor. Input **and** output are required for an item, so
+set `TraceBody::$input` and pass the output to `end()`.
+
+To score an item, use the item trace's ids:
+
+```php
+Langfuse::score(new ScoreBody(
+    name: 'accuracy',
     traceId: $trace->getId(),
+    observationId: $trace->getRootObservationId(),
+    value: 1.0,
+));
+```
+
+For an experiment-level score, use `datasetRunId: 'run-2026-01'` instead - the field
+kept its v2 name but now holds the experiment id.
+
+### Reading experiments back
+
+Both endpoints require a `fromStartTime` window and use cursor pagination.
+
+```php
+use Axyr\Langfuse\Dto\ExperimentItemQuery;
+use Axyr\Langfuse\Dto\ExperimentQuery;
+
+$experiments = Langfuse::listExperiments(new ExperimentQuery(
+    fromStartTime: '2026-01-01T00:00:00Z',
+    toStartTime: '2026-02-01T00:00:00Z',
+    datasetId: ['ds-1'],
+    fields: 'core,metadata,scores',
+    limit: 50,
 ));
 
-// Read a run back with all of its run items
-$run = Langfuse::getDatasetRun('qa-eval', 'run-2026-01');
-
-if ($run !== null) {
-    $run->run->name;                 // DatasetRunResponse
-    foreach ($run->datasetRunItems as $runItem) {
-        $runItem->datasetItemId;
-        $runItem->traceId;
-    }
+foreach ($experiments?->data ?? [] as $experiment) {
+    $experiment->id;
+    $experiment->name;
+    $experiment->itemCount;
+    $experiment->scores;      // ScoreResponse[] with fields=scores
 }
 
-// List runs for a dataset
-$runs = Langfuse::listDatasetRuns('qa-eval', page: 1, limit: 50);
+// One experiment: a filtered list that returns the first row
+$experiment = Langfuse::getExperiment('run-2026-01', '2026-01-01T00:00:00Z');
 
-// List run items (note: filtered by dataset id, not name)
-$runItems = Langfuse::listDatasetRunItems('ds-1', 'run-2026-01', page: 1, limit: 50);
+$items = Langfuse::listExperimentItems(new ExperimentItemQuery(
+    fromStartTime: '2026-01-01T00:00:00Z',
+    experimentId: ['run-2026-01'],
+    fields: 'core,dataset,io,scores',
+    limit: 50,
+));
 
-Langfuse::deleteDatasetRun('qa-eval', 'run-2026-01'); // returns bool
+foreach ($items?->data ?? [] as $item) {
+    $item->id;               // the root observation id of the item's trace
+    $item->traceId;
+    $item->experimentItemId; // the dataset item id
+    $item->input;
+    $item->output;
+    $item->expectedOutput;
+    $item->scores;
+}
 ```
+
+`ExperimentQuery` field groups: `core` (default), `metadata`, `scores`.
+`ExperimentItemQuery` field groups: `core`, `dataset` (both default), `io`,
+`metadata`, `itemMetadata`, `experimentMetadata`, `scores`.
+
+> **There is no delete.** v4 has no endpoint that removes an experiment. The only way
+> to remove its data is `DELETE /api/public/traces` with the item trace ids, which
+> this package does not wrap: trace deletion is rate limited to 50 requests per day
+> on Hobby and 1,000 on Pro, so it is a deliberate manual operation. Prefer starting a
+> new experiment over deleting an old one.
 
 ## Evaluation harness
 
 A typical external evaluation app (for example a RAG quality harness) uses the
-write side to produce traces and the read side to pull results back for a run and
-snapshot them:
+write side to produce item traces and the read side to pull results back:
 
 ```php
-use Axyr\Langfuse\Dto\CreateDatasetRunItemBody;
+use Axyr\Langfuse\Dto\DatasetItemQuery;
+use Axyr\Langfuse\Dto\ExperimentContext;
+use Axyr\Langfuse\Dto\ExperimentItemContext;
+use Axyr\Langfuse\Dto\ExperimentItemQuery;
 use Axyr\Langfuse\Dto\MetricQuery;
 use Axyr\Langfuse\Dto\ScoreQuery;
+use Axyr\Langfuse\Dto\TraceBody;
 
-$datasetName = 'qa-eval';
-$runName = 'run-2026-01';
+$experiment = ExperimentContext::named('run-2026-01', datasetId: 'ds-1');
+$startedAt = now()->toIso8601ZuluString();
 
-// 1. Execute the pipeline over each dataset item, tracing each call (write side),
-//    and register the produced trace against the run.
-foreach (Langfuse::listDatasetItems(new \Axyr\Langfuse\Dto\DatasetItemQuery(
-    datasetName: $datasetName,
-))?->data ?? [] as $item) {
-    $trace = Langfuse::trace(/* ... run your pipeline, traced ... */);
+// 1. Execute the pipeline over each dataset item, tracing each run as an
+//    experiment item.
+foreach (Langfuse::listDatasetItems(new DatasetItemQuery(datasetName: 'qa-eval'))?->data ?? [] as $item) {
+    $trace = Langfuse::trace((new TraceBody(
+        name: 'qa-eval',
+        input: $item->input,
+        environment: 'experiment',
+    ))->forExperimentItem($experiment, new ExperimentItemContext(
+        itemId: $item->id,
+        expectedOutput: $item->expectedOutput,
+    )));
 
-    Langfuse::createDatasetRunItem(new CreateDatasetRunItemBody(
-        runName: $runName,
-        datasetItemId: $item->id,
-        traceId: $trace->getId(),
-    ));
+    $answer = /* ... run your pipeline, traced under $trace ... */ '';
+
+    $trace->end(output: $answer);
 }
 
-Langfuse::flush(); // ensure traces/scores are sent before reading back
+Langfuse::shutdown(); // end anything still open and flush before reading back
 
-// 2. Pull the scores produced for this run.
-$scores = Langfuse::getScores(new ScoreQuery(datasetRunId: $runName));
+// 2. Pull the scores produced for this experiment.
+$scores = Langfuse::getScores(new ScoreQuery(experimentId: [$experiment->id]));
 
-// 3. Pull aggregate metrics for the run window.
+// 3. Pull the items with their inputs, outputs and scores.
+$items = Langfuse::listExperimentItems(new ExperimentItemQuery(
+    fromStartTime: $startedAt,
+    experimentId: [$experiment->id],
+    fields: 'core,dataset,io,scores',
+));
+
+// 4. Pull aggregate metrics for the run window (one call - see the rate limit).
 $metrics = Langfuse::queryMetrics(new MetricQuery(
     view: 'scores-numeric',
     metrics: [['measure' => 'value', 'aggregation' => 'avg']],
-    fromTimestamp: '2026-01-01T00:00:00Z',
-    toTimestamp: '2026-02-01T00:00:00Z',
+    fromTimestamp: $startedAt,
+    toTimestamp: now()->toIso8601ZuluString(),
     dimensions: [['field' => 'name']],
 ));
 
-// 4. Snapshot $scores and $metrics into your own storage and build the report.
+// 5. Snapshot $items, $scores and $metrics into your own storage and build the report.
 ```
 
 ## Testing
@@ -293,5 +441,6 @@ expect(Langfuse::getScore('score-abc')?->value)->toBe(0.95);
 ```
 
 Seeders: `withScore()`, `withObservation()`, `withMetrics()`, `withDataset()`,
-`withDatasetItem()`, `withDatasetRun()`. Creation assertions: `assertDatasetCreated()`,
-`assertDatasetItemCreated()`, `assertDatasetRunItemCreated()`. See [Testing](testing.md).
+`withDatasetItem()`, `withExperiment()`, `withExperimentItem()`. Creation
+assertions: `assertDatasetCreated()`, `assertDatasetItemCreated()`,
+`assertExperimentItemTraced()`. See [Testing](testing.md).

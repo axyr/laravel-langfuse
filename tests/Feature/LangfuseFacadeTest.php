@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Axyr\Langfuse\Contracts\LangfuseClientInterface;
+use Axyr\Langfuse\Dto\IdGenerator;
 use Axyr\Langfuse\Dto\ScoreBody;
 use Axyr\Langfuse\Dto\TraceBody;
 use Axyr\Langfuse\LangfuseClient;
@@ -23,7 +24,8 @@ it('proxies trace method', function () {
     $trace = LangfuseFacade::trace(new TraceBody(id: 'trace-1', name: 'facade-test'));
 
     expect($trace)->toBeInstanceOf(LangfuseTrace::class)
-        ->and($trace->getId())->toBe('trace-1');
+        ->and($trace->getId())->toBe(IdGenerator::traceIdFromSeed('trace-1'))
+        ->and($trace->getRootObservationId())->toMatch('/^[0-9a-f]{16}$/');
 });
 
 it('proxies score method', function () {
@@ -44,6 +46,15 @@ it('proxies flush method', function () {
     Http::fake();
 
     LangfuseFacade::flush();
+
+    expect(true)->toBeTrue();
+});
+
+it('proxies shutdown method', function () {
+    Http::fake();
+
+    LangfuseFacade::trace(new TraceBody(name: 'shutdown-test'));
+    LangfuseFacade::shutdown();
 
     expect(true)->toBeTrue();
 });

@@ -9,6 +9,7 @@ use Axyr\Langfuse\Dto\GenerationBody;
 use Axyr\Langfuse\Dto\SpanBody;
 use Axyr\Langfuse\Dto\TraceBody;
 use Axyr\Langfuse\Dto\Usage;
+use Axyr\Langfuse\Enums\ObservationType;
 use Axyr\Langfuse\Objects\LangfuseSpan;
 use Axyr\Langfuse\Objects\LangfuseTrace;
 use Axyr\Langfuse\Objects\NullLangfuseTrace;
@@ -43,6 +44,9 @@ class NeuronAiObserver implements ObserverInterface
     ];
 
     private ?LangfuseTrace $trace = null;
+
+    /** Whether this observer created the trace itself, and may therefore end it. */
+    private bool $ownsTrace = false;
 
     /** @var array<string, float> */
     private array $startTimes = [];
@@ -87,6 +91,8 @@ class NeuronAiObserver implements ObserverInterface
             ));
         }
 
+        $this->endOwnedTrace($trace);
+
         $this->langfuse->flush();
     }
 
@@ -126,6 +132,7 @@ class NeuronAiObserver implements ObserverInterface
         $span = $trace->span(new SpanBody(
             name: "tool-{$toolName}",
             startTime: $this->formatTime($this->startTimes["tool-{$toolName}"]),
+            type: ObservationType::Tool,
         ));
 
         $this->spans["tool-{$toolName}"] = $span;
@@ -173,6 +180,7 @@ class NeuronAiObserver implements ObserverInterface
             name: 'rag-retrieval',
             startTime: $this->formatTime($this->startTimes['rag']),
             input: $data->question->getContent(),
+            type: ObservationType::Retriever,
         ));
 
         $this->spans['rag'] = $span;
@@ -217,6 +225,26 @@ class NeuronAiObserver implements ObserverInterface
                 'error_trace' => $data->exception->getTraceAsString(),
             ],
         ));
+
+        $this->endOwnedTrace($trace);
+    }
+
+    /**
+     * The root observation is exported by `end()`. A trace adopted from the
+     * middleware or from manual tracing belongs to its own owner and is left open.
+     */
+    private function endOwnedTrace(LangfuseTrace $trace): void
+    {
+        if (! $this->ownsTrace) {
+            return;
+        }
+
+        $trace->end();
+
+        $this->langfuse->setCurrentTrace(new NullLangfuseTrace());
+
+        $this->trace = null;
+        $this->ownsTrace = false;
     }
 
     private function handleSimpleEvent(string $event, object $source): bool
@@ -285,6 +313,7 @@ class NeuronAiObserver implements ObserverInterface
 
         $this->langfuse->setCurrentTrace($trace);
         $this->trace = $trace;
+        $this->ownsTrace = true;
 
         return $trace;
     }

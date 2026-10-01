@@ -37,13 +37,14 @@ arch('only api clients use Http facade')
     ->expect('Illuminate\Support\Facades\Http')
     ->toOnlyBeUsedIn([
         'Axyr\\Langfuse\\Api\IngestionApiClient',
+        'Axyr\\Langfuse\\Api\OtelTraceApiClient',
         'Axyr\\Langfuse\\Api\PromptApiClient',
         'Axyr\\Langfuse\\Api\ScoreApiClient',
         'Axyr\\Langfuse\\Api\ObservationApiClient',
         'Axyr\\Langfuse\\Api\MetricsApiClient',
         'Axyr\\Langfuse\\Api\DatasetApiClient',
         'Axyr\\Langfuse\\Api\DatasetItemApiClient',
-        'Axyr\\Langfuse\\Api\DatasetRunApiClient',
+        'Axyr\\Langfuse\\Api\ExperimentApiClient',
     ]);
 
 arch('facade extends base facade')
@@ -97,6 +98,34 @@ arch('queued event batcher implements batcher interface')
 arch('send ingestion batch job implements should queue')
     ->expect('Axyr\\Langfuse\\Jobs\SendIngestionBatchJob')
     ->toImplement('Illuminate\\Contracts\\Queue\\ShouldQueue');
+
+arch('send otel batch job implements should queue')
+    ->expect('Axyr\\Langfuse\\Jobs\SendOtelBatchJob')
+    ->toImplement('Illuminate\\Contracts\\Queue\\ShouldQueue');
+
+arch('event batcher implements batcher interface')
+    ->expect('Axyr\\Langfuse\\Batch\EventBatcher')
+    ->toImplement('Axyr\\Langfuse\\Contracts\EventBatcherInterface');
+
+arch('null event batcher implements batcher interface')
+    ->expect('Axyr\\Langfuse\\Batch\NullEventBatcher')
+    ->toImplement('Axyr\\Langfuse\\Contracts\EventBatcherInterface');
+
+arch('otel trace api client implements its interface')
+    ->expect('Axyr\\Langfuse\\Api\OtelTraceApiClient')
+    ->toImplement('Axyr\\Langfuse\\Contracts\OtelTraceApiClientInterface');
+
+arch('experiment api client implements its interface')
+    ->expect('Axyr\\Langfuse\\Api\ExperimentApiClient')
+    ->toImplement('Axyr\\Langfuse\\Contracts\ExperimentApiClientInterface');
+
+arch('observation objects end on shutdown')
+    ->expect([
+        'Axyr\\Langfuse\\Objects\LangfuseTrace',
+        'Axyr\\Langfuse\\Objects\LangfuseSpan',
+        'Axyr\\Langfuse\\Objects\LangfuseGeneration',
+    ])
+    ->toImplement('Axyr\\Langfuse\\Contracts\EndsOnShutdownInterface');
 
 arch('null trace extends trace')
     ->expect('Axyr\\Langfuse\\Objects\NullLangfuseTrace')

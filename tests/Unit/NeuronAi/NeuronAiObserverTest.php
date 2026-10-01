@@ -2,18 +2,15 @@
 
 declare(strict_types=1);
 
-use Axyr\Langfuse\Cache\PromptCache;
 use Axyr\Langfuse\Config\LangfuseConfig;
-use Axyr\Langfuse\Contracts\PromptApiClientInterface;
-use Axyr\Langfuse\Contracts\ScoreApiClientInterface;
-use Axyr\Langfuse\Dto\IngestionEvent;
 use Axyr\Langfuse\Dto\TextPrompt;
-use Axyr\Langfuse\LangfuseClient;
 use Axyr\Langfuse\NeuronAi\NeuronAiObserver;
+use Axyr\Langfuse\Objects\LangfuseGeneration;
+use Axyr\Langfuse\Objects\LangfuseSpan;
+use Axyr\Langfuse\Objects\LangfuseTrace;
 use Axyr\Langfuse\Objects\NullLangfuseTrace;
 use Axyr\Langfuse\Prompt\CurrentPromptRegistry;
-use Axyr\Langfuse\Prompt\PromptManager;
-use Axyr\Langfuse\Testing\RecordingEventBatcher;
+use Axyr\Langfuse\Testing\LangfuseFake;
 use NeuronAI\Chat\Messages\Message;
 use NeuronAI\Chat\Messages\Usage;
 use NeuronAI\Observability\Events\AgentError;
@@ -28,31 +25,36 @@ use NeuronAI\Observability\Events\WorkflowStart;
 use NeuronAI\Tools\ToolInterface;
 use NeuronAI\Workflow\WorkflowState;
 
-function makeNeuronLangfuseClient(): array
+function makeNeuronLangfuseClient(): LangfuseFake
 {
-    $batcher = new RecordingEventBatcher();
-
-    $config = new LangfuseConfig(publicKey: 'pk', secretKey: 'sk');
-    $promptApiClient = Mockery::mock(PromptApiClientInterface::class);
-    $promptManager = new PromptManager(
-        $promptApiClient,
-        new PromptCache(),
+    return new LangfuseFake(
+        new CurrentPromptRegistry(),
+        new LangfuseConfig(publicKey: 'pk', secretKey: 'sk'),
     );
+}
 
-    $client = new LangfuseClient(
-        $batcher,
-        $config,
-        $promptManager,
-        Mockery::mock(ScoreApiClientInterface::class),
-        $promptApiClient,
-        Mockery::mock(\Axyr\Langfuse\Contracts\ObservationApiClientInterface::class),
-        Mockery::mock(\Axyr\Langfuse\Contracts\MetricsApiClientInterface::class),
-        Mockery::mock(\Axyr\Langfuse\Contracts\DatasetApiClientInterface::class),
-        Mockery::mock(\Axyr\Langfuse\Contracts\DatasetItemApiClientInterface::class),
-        Mockery::mock(\Axyr\Langfuse\Contracts\DatasetRunApiClientInterface::class),
-    );
+/**
+ * @return array<int, array<string, mixed>>
+ */
+function neuronTraceBodies(LangfuseFake $fake): array
+{
+    return array_map(fn(LangfuseTrace $trace): array => $trace->getBody()->toArray(), $fake->traces());
+}
 
-    return [$client, $batcher];
+/**
+ * @return array<int, array<string, mixed>>
+ */
+function neuronGenerationBodies(LangfuseFake $fake): array
+{
+    return array_map(fn(LangfuseGeneration $g): array => $g->getBody()->toArray(), $fake->generations());
+}
+
+/**
+ * @return array<int, array<string, mixed>>
+ */
+function neuronSpanBodies(LangfuseFake $fake): array
+{
+    return array_map(fn(LangfuseSpan $s): array => $s->getBody()->toArray(), $fake->spans());
 }
 
 function makeTestNeuronAgent(): object
@@ -108,40 +110,35 @@ function makeNeuronMessage(string $content = 'Hello', ?Usage $usage = null): Mes
 }
 
 it('dispatches known events to handler methods', function () {
-    [$client, $batcher] = makeNeuronLangfuseClient();
-    $observer = new NeuronAiObserver($client);
+    $fake = makeNeuronLangfuseClient();
+    $observer = new NeuronAiObserver($fake);
     $agent = makeTestNeuronAgent();
 
-    // workflow-start should create a trace
     $observer->onEvent('workflow-start', $agent, new WorkflowStart());
-    expect($batcher->events())->toHaveCount(1);
+    expect($fake->traces())->toHaveCount(1);
 
     // unknown event should be silently ignored
     $observer->onEvent('unknown-event', $agent);
-    expect($batcher->events())->toHaveCount(1);
+    expect($fake->traces())->toHaveCount(1);
 });
 
-it('creates trace on workflow-start', function () {
-    [$client, $batcher] = makeNeuronLangfuseClient();
-    $observer = new NeuronAiObserver($client);
-    $agent = makeTestNeuronAgent();
+it('creates trace on workflow-start without sending anything', function () {
+    $fake = makeNeuronLangfuseClient();
+    $observer = new NeuronAiObserver($fake);
 
-    $observer->onEvent('workflow-start', $agent, new WorkflowStart());
+    $observer->onEvent('workflow-start', makeTestNeuronAgent(), new WorkflowStart());
 
-    $traceEvents = collect($batcher->events())->filter(
-        fn(IngestionEvent $e) => $e->type->value === 'trace-create',
-    );
+    $body = neuronTraceBodies($fake)[0];
 
-    expect($traceEvents)->toHaveCount(1);
-
-    $body = $traceEvents->first()->body->toArray();
-    expect($body['name'])->toStartWith('neuron-ai-')
-        ->and($body['metadata']['source'])->toBe('neuron-ai-auto-instrumentation');
+    expect($fake->traces())->toHaveCount(1)
+        ->and($body['name'])->toStartWith('neuron-ai-')
+        ->and($body['metadata']['source'])->toBe('neuron-ai-auto-instrumentation')
+        ->and($fake->recorder()->observations())->toBeEmpty();
 });
 
-it('creates generation on inference events', function () {
-    [$client, $batcher] = makeNeuronLangfuseClient();
-    $observer = new NeuronAiObserver($client);
+it('creates and ends a generation on inference events', function () {
+    $fake = makeNeuronLangfuseClient();
+    $observer = new NeuronAiObserver($fake);
     $agent = makeTestNeuronAgent();
 
     $inputMessage = makeNeuronMessage('What is PHP?');
@@ -154,27 +151,18 @@ it('creates generation on inference events', function () {
         response: $responseMessage,
     ));
 
-    $types = array_map(fn(IngestionEvent $e) => $e->type->value, $batcher->events());
-    expect($types)->toContain('generation-create')
-        ->and($types)->toContain('generation-update');
+    $body = neuronGenerationBodies($fake)[0];
 
-    $createEvent = collect($batcher->events())->first(
-        fn(IngestionEvent $e) => $e->type->value === 'generation-create',
-    );
-    $body = $createEvent->body->toArray();
-    expect($body['name'])->toBe('inference')
-        ->and($body['input'])->toBe('What is PHP?');
-
-    $updateEvent = collect($batcher->events())->first(
-        fn(IngestionEvent $e) => $e->type->value === 'generation-update',
-    );
-    $body = $updateEvent->body->toArray();
-    expect($body['output'])->toBe('PHP is a programming language');
+    expect($fake->generations())->toHaveCount(1)
+        ->and($fake->generations()[0]->hasEnded())->toBeTrue()
+        ->and($body['name'])->toBe('inference')
+        ->and($body['input'])->toBe('What is PHP?')
+        ->and($body['output'])->toBe('PHP is a programming language');
 });
 
 it('captures token usage in generation', function () {
-    [$client, $batcher] = makeNeuronLangfuseClient();
-    $observer = new NeuronAiObserver($client);
+    $fake = makeNeuronLangfuseClient();
+    $observer = new NeuronAiObserver($fake);
     $agent = makeTestNeuronAgent();
 
     $inputMessage = makeNeuronMessage('Hello');
@@ -188,10 +176,7 @@ it('captures token usage in generation', function () {
         response: $responseMessage,
     ));
 
-    $updateEvent = collect($batcher->events())->first(
-        fn(IngestionEvent $e) => $e->type->value === 'generation-update',
-    );
-    $body = $updateEvent->body->toArray();
+    $body = neuronGenerationBodies($fake)[0];
 
     expect($body)->toHaveKey('usage')
         ->and($body['usage']['input'])->toBe(10)
@@ -199,9 +184,9 @@ it('captures token usage in generation', function () {
         ->and($body['usage']['total'])->toBe(30);
 });
 
-it('creates span for tool events', function () {
-    [$client, $batcher] = makeNeuronLangfuseClient();
-    $observer = new NeuronAiObserver($client);
+it('creates and ends a span for tool events', function () {
+    $fake = makeNeuronLangfuseClient();
+    $observer = new NeuronAiObserver($fake);
     $agent = makeTestNeuronAgent();
 
     $tool = makeTestNeuronTool('web-search', ['query' => 'PHP'], 'Search results');
@@ -210,43 +195,29 @@ it('creates span for tool events', function () {
     $observer->onEvent('tool-calling', $agent, new ToolCalling($tool));
     $observer->onEvent('tool-called', $agent, new ToolCalled($tool));
 
-    $spanCreateEvents = collect($batcher->events())->filter(
-        fn(IngestionEvent $e) => $e->type->value === 'span-create',
-    );
-    $spanUpdateEvents = collect($batcher->events())->filter(
-        fn(IngestionEvent $e) => $e->type->value === 'span-update',
-    );
+    $body = neuronSpanBodies($fake)[0];
 
-    expect($spanCreateEvents)->toHaveCount(1)
-        ->and($spanUpdateEvents)->toHaveCount(1);
-
-    $spanBody = $spanCreateEvents->first()->body->toArray();
-    expect($spanBody['name'])->toBe('tool-web-search');
-
-    $spanUpdateBody = $spanUpdateEvents->first()->body->toArray();
-    expect($spanUpdateBody['output'])->toBe('Search results');
+    expect($fake->spans())->toHaveCount(1)
+        ->and($fake->spans()[0]->hasEnded())->toBeTrue()
+        ->and($body['name'])->toBe('tool-web-search')
+        ->and($body['type'])->toBe('tool')
+        ->and($body['output'])->toBe('Search results');
 });
 
 it('handles tool-called without prior tool-calling gracefully', function () {
-    [$client, $batcher] = makeNeuronLangfuseClient();
-    $observer = new NeuronAiObserver($client);
+    $fake = makeNeuronLangfuseClient();
+    $observer = new NeuronAiObserver($fake);
     $agent = makeTestNeuronAgent();
 
-    $tool = makeTestNeuronTool('search');
-
     $observer->onEvent('workflow-start', $agent, new WorkflowStart());
-    $observer->onEvent('tool-called', $agent, new ToolCalled($tool));
+    $observer->onEvent('tool-called', $agent, new ToolCalled(makeTestNeuronTool('search')));
 
-    $spanEvents = collect($batcher->events())->filter(
-        fn(IngestionEvent $e) => str_contains($e->type->value, 'span'),
-    );
-
-    expect($spanEvents)->toBeEmpty();
+    expect($fake->spans())->toBeEmpty();
 });
 
-it('creates span for RAG retrieval events', function () {
-    [$client, $batcher] = makeNeuronLangfuseClient();
-    $observer = new NeuronAiObserver($client);
+it('creates and ends a span for RAG retrieval events', function () {
+    $fake = makeNeuronLangfuseClient();
+    $observer = new NeuronAiObserver($fake);
     $agent = makeTestNeuronAgent();
 
     $question = makeNeuronMessage('What is Laravel?');
@@ -255,123 +226,101 @@ it('creates span for RAG retrieval events', function () {
     $observer->onEvent('rag-retrieving', $agent, new Retrieving($question));
     $observer->onEvent('rag-retrieved', $agent, new Retrieved($question, ['doc1', 'doc2']));
 
-    $spanCreateEvents = collect($batcher->events())->filter(
-        fn(IngestionEvent $e) => $e->type->value === 'span-create',
-    );
-    $spanUpdateEvents = collect($batcher->events())->filter(
-        fn(IngestionEvent $e) => $e->type->value === 'span-update',
-    );
+    $body = neuronSpanBodies($fake)[0];
 
-    expect($spanCreateEvents)->toHaveCount(1)
-        ->and($spanUpdateEvents)->toHaveCount(1);
-
-    $spanBody = $spanCreateEvents->first()->body->toArray();
-    expect($spanBody['name'])->toBe('rag-retrieval')
-        ->and($spanBody['input'])->toBe('What is Laravel?');
-
-    $spanUpdateBody = $spanUpdateEvents->first()->body->toArray();
-    expect($spanUpdateBody['output'])->toBe([
-        'question' => 'What is Laravel?',
-        'documents' => 2,
-    ]);
+    expect($fake->spans())->toHaveCount(1)
+        ->and($body['name'])->toBe('rag-retrieval')
+        ->and($body['type'])->toBe('retriever')
+        ->and($body['input'])->toBe('What is Laravel?')
+        ->and($body['output'])->toBe([
+            'question' => 'What is Laravel?',
+            'documents' => 2,
+        ]);
 });
 
-it('updates trace with error on error event', function () {
-    [$client, $batcher] = makeNeuronLangfuseClient();
-    $observer = new NeuronAiObserver($client);
+it('records the error on the trace and ends it', function () {
+    $fake = makeNeuronLangfuseClient();
+    $observer = new NeuronAiObserver($fake);
     $agent = makeTestNeuronAgent();
 
     $observer->onEvent('workflow-start', $agent, new WorkflowStart());
     $observer->onEvent('error', $agent, new AgentError(new RuntimeException('Something went wrong')));
 
-    $traceCreateEvents = collect($batcher->events())->filter(
-        fn(IngestionEvent $e) => $e->type->value === 'trace-create',
-    );
+    $body = neuronTraceBodies($fake)[0];
 
-    // Should have 2 trace-create events (initial + update with error)
-    expect($traceCreateEvents)->toHaveCount(2);
-
-    $updateBody = $traceCreateEvents->last()->body->toArray();
-    expect($updateBody['metadata']['error'])->toBe('Something went wrong')
-        ->and($updateBody['metadata'])->toHaveKey('error_trace');
+    expect($fake->traces())->toHaveCount(1)
+        ->and($body['metadata']['error'])->toBe('Something went wrong')
+        ->and($body['metadata'])->toHaveKey('error_trace')
+        ->and($body['metadata']['source'])->toBe('neuron-ai-auto-instrumentation')
+        ->and($fake->traces()[0]->hasEnded())->toBeTrue();
 });
 
 it('reuses existing trace from langfuse client', function () {
-    [$client, $batcher] = makeNeuronLangfuseClient();
-    $observer = new NeuronAiObserver($client);
+    $fake = makeNeuronLangfuseClient();
     $agent = makeTestNeuronAgent();
 
-    // First observer creates a trace
+    (new NeuronAiObserver($fake))->onEvent('workflow-start', $agent, new WorkflowStart());
+    (new NeuronAiObserver($fake))->onEvent('workflow-start', $agent, new WorkflowStart());
+
+    expect($fake->traces())->toHaveCount(1);
+});
+
+it('leaves an adopted trace open for its owner', function () {
+    $fake = makeNeuronLangfuseClient();
+    $agent = makeTestNeuronAgent();
+
+    $trace = $fake->trace(new \Axyr\Langfuse\Dto\TraceBody(name: 'workflow'));
+    $fake->setCurrentTrace($trace);
+
+    $observer = new NeuronAiObserver($fake);
     $observer->onEvent('workflow-start', $agent, new WorkflowStart());
+    $observer->onEvent('workflow-end', $agent, new WorkflowEnd(new WorkflowState(['result' => 'success'])));
 
-    // Second observer should reuse the current trace
-    $observer2 = new NeuronAiObserver($client);
-    $observer2->onEvent('workflow-start', $agent, new WorkflowStart());
-
-    $traceEvents = collect($batcher->events())->filter(
-        fn(IngestionEvent $e) => $e->type->value === 'trace-create',
-    );
-
-    // Only 1 trace should be created
-    expect($traceEvents)->toHaveCount(1);
+    expect($trace->hasEnded())->toBeFalse();
 });
 
 it('sets current trace on langfuse client', function () {
-    [$client] = makeNeuronLangfuseClient();
-    $observer = new NeuronAiObserver($client);
-    $agent = makeTestNeuronAgent();
+    $fake = makeNeuronLangfuseClient();
+    $observer = new NeuronAiObserver($fake);
 
-    $observer->onEvent('workflow-start', $agent, new WorkflowStart());
+    $observer->onEvent('workflow-start', makeTestNeuronAgent(), new WorkflowStart());
 
-    expect($client->currentTrace())->not->toBeInstanceOf(NullLangfuseTrace::class);
+    expect($fake->currentTrace())->not->toBeInstanceOf(NullLangfuseTrace::class);
 });
 
-it('updates trace output on workflow-end', function () {
-    [$client, $batcher] = makeNeuronLangfuseClient();
-    $observer = new NeuronAiObserver($client);
+it('sets the trace output and ends the owned trace on workflow-end', function () {
+    $fake = makeNeuronLangfuseClient();
+    $observer = new NeuronAiObserver($fake);
     $agent = makeTestNeuronAgent();
 
-    $state = new WorkflowState(['result' => 'success']);
-
     $observer->onEvent('workflow-start', $agent, new WorkflowStart());
-    $observer->onEvent('workflow-end', $agent, new WorkflowEnd($state));
+    $observer->onEvent('workflow-end', $agent, new WorkflowEnd(new WorkflowState(['result' => 'success'])));
 
-    $traceCreateEvents = collect($batcher->events())->filter(
-        fn(IngestionEvent $e) => $e->type->value === 'trace-create',
-    );
+    $body = neuronTraceBodies($fake)[0];
 
-    expect($traceCreateEvents)->toHaveCount(2);
-
-    $updateBody = $traceCreateEvents->last()->body->toArray();
-    expect($updateBody['output'])->toBe(['result' => 'success']);
+    expect($body['output'])->toBe(['result' => 'success'])
+        ->and($fake->traces()[0]->hasEnded())->toBeTrue()
+        ->and($fake->currentTrace())->toBeInstanceOf(NullLangfuseTrace::class);
 });
 
 it('handles inference-stop with false message', function () {
-    [$client, $batcher] = makeNeuronLangfuseClient();
-    $observer = new NeuronAiObserver($client);
+    $fake = makeNeuronLangfuseClient();
+    $observer = new NeuronAiObserver($fake);
     $agent = makeTestNeuronAgent();
-
-    $responseMessage = makeNeuronMessage('Response text');
 
     $observer->onEvent('workflow-start', $agent, new WorkflowStart());
     $observer->onEvent('inference-start', $agent, new InferenceStart(makeNeuronMessage('input')));
     $observer->onEvent('inference-stop', $agent, new InferenceStop(
         message: false,
-        response: $responseMessage,
+        response: makeNeuronMessage('Response text'),
     ));
 
-    $createEvent = collect($batcher->events())->first(
-        fn(IngestionEvent $e) => $e->type->value === 'generation-create',
-    );
-    $body = $createEvent->body->toArray();
-
-    // Input should be null when message is false
-    expect($body)->not->toHaveKey('input');
+    expect(neuronGenerationBodies($fake)[0])->not->toHaveKey('input');
 });
 
 it('handles full workflow with inference and tools', function () {
-    [$client, $batcher] = makeNeuronLangfuseClient();
-    $observer = new NeuronAiObserver($client);
+    $fake = makeNeuronLangfuseClient();
+    $observer = new NeuronAiObserver($fake);
     $agent = makeTestNeuronAgent();
 
     $inputMessage = makeNeuronMessage('Search for PHP info');
@@ -386,20 +335,32 @@ it('handles full workflow with inference and tools', function () {
     $observer->onEvent('tool-called', $agent, new ToolCalled($tool));
     $observer->onEvent('workflow-end', $agent, new WorkflowEnd(new WorkflowState(['done' => true])));
 
-    $types = array_map(fn(IngestionEvent $e) => $e->type->value, $batcher->events());
+    $fake->assertTraceCreated()
+        ->assertTraceEnded()
+        ->assertGenerationEnded('inference')
+        ->assertSpanEnded('tool-web-search')
+        ->assertEventCount(3);
+});
 
-    expect($types)->toContain('trace-create')
-        ->and($types)->toContain('generation-create')
-        ->and($types)->toContain('generation-update')
-        ->and($types)->toContain('span-create')
-        ->and($types)->toContain('span-update');
+it('nests the inference generation under the root observation', function () {
+    $fake = makeNeuronLangfuseClient();
+    $observer = new NeuronAiObserver($fake);
+    $agent = makeTestNeuronAgent();
+    $message = makeNeuronMessage('What is PHP?');
+
+    $observer->onEvent('workflow-start', $agent, new WorkflowStart());
+    $observer->onEvent('inference-start', $agent, new InferenceStart($message));
+    $observer->onEvent('inference-stop', $agent, new InferenceStop(message: $message, response: $message));
+
+    expect($fake->generations()[0]->getBody()->parentObservationId)
+        ->toBe($fake->traces()[0]->getRootObservationId());
 });
 
 it('links the registered managed prompt to the inference generation', function () {
-    [$client, $batcher] = makeNeuronLangfuseClient();
+    $fake = makeNeuronLangfuseClient();
     $registry = new CurrentPromptRegistry();
     $registry->set(new TextPrompt(name: 'movie-critic', version: 7, prompt: 'text'));
-    $observer = new NeuronAiObserver($client, $registry);
+    $observer = new NeuronAiObserver($fake, $registry);
     $agent = makeTestNeuronAgent();
     $message = makeNeuronMessage('What is PHP?');
 
@@ -408,7 +369,7 @@ it('links the registered managed prompt to the inference generation', function (
         $observer->onEvent('inference-stop', $agent, new InferenceStop(message: $message, response: $message));
     }
 
-    $bodies = array_map(fn(IngestionEvent $e) => $e->toArray()['body'], $batcher->eventsOfType('generation-create'));
+    $bodies = neuronGenerationBodies($fake);
 
     expect($bodies[0]['promptName'])->toBe('movie-critic')
         ->and($bodies[0]['promptVersion'])->toBe(7)

@@ -54,6 +54,8 @@ it('end is a no-op', function () {
     $span = new NullLangfuseSpan();
 
     $span->end(output: 'done');
+    $span->endOnShutdown();
 
-    expect($span->getId())->toBe('');
+    expect($span->getId())->toBe('')
+        ->and($span->hasEnded())->toBeTrue();
 });

@@ -5,52 +5,34 @@ declare(strict_types=1);
 namespace Axyr\Langfuse\Batch;
 
 use Axyr\Langfuse\Config\LangfuseConfig;
-use Axyr\Langfuse\Contracts\EventBatcherInterface;
-use Axyr\Langfuse\Contracts\IngestionApiClientInterface;
+use Axyr\Langfuse\Contracts\OtelTraceApiClientInterface;
+use Axyr\Langfuse\Contracts\ScoreApiClientInterface;
 use Axyr\Langfuse\Dto\IngestionBatch;
-use Axyr\Langfuse\Dto\IngestionEvent;
-use Illuminate\Support\Facades\Log;
+use Axyr\Langfuse\Dto\Otlp\OtlpExportRequest;
+use Axyr\Langfuse\Otlp\OtlpRequestFactory;
 
-class EventBatcher implements EventBatcherInterface
+/**
+ * Sends the batch inside the current process.
+ */
+class EventBatcher extends AbstractEventBatcher
 {
-    /** @var array<IngestionEvent> */
-    private array $queue = [];
-
     public function __construct(
-        private readonly IngestionApiClientInterface $apiClient,
-        private readonly LangfuseConfig $config,
-    ) {}
-
-    public function enqueue(IngestionEvent $event): void
-    {
-        $this->queue[] = $event;
-
-        if (count($this->queue) >= $this->config->flushAt) {
-            $this->flush();
-        }
+        private readonly OtelTraceApiClientInterface $otelClient,
+        private readonly ScoreApiClientInterface $scoreApiClient,
+        LangfuseConfig $config,
+        OtlpRequestFactory $requestFactory,
+        ScoreBatchFactory $scoreBatchFactory,
+    ) {
+        parent::__construct($config, $requestFactory, $scoreBatchFactory);
     }
 
-    public function flush(): void
+    protected function sendObservations(OtlpExportRequest $request): void
     {
-        if ($this->queue === []) {
-            return;
-        }
-
-        $events = $this->queue;
-        $this->queue = [];
-
-        try {
-            $this->apiClient->send(new IngestionBatch(
-                batch: $events,
-                metadata: $this->config->batchMetadata(count($events)),
-            ));
-        } catch (\Throwable $throwable) {
-            Log::warning('Langfuse flush error', ['message' => $throwable->getMessage()]);
-        }
+        $this->otelClient->export($request);
     }
 
-    public function count(): int
+    protected function sendScores(IngestionBatch $batch): void
     {
-        return count($this->queue);
+        $this->scoreApiClient->ingest($batch);
     }
 }

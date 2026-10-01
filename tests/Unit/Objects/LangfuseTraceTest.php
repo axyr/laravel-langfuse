@@ -2,205 +2,229 @@
 
 declare(strict_types=1);
 
-use Axyr\Langfuse\Batch\NullEventBatcher;
-use Axyr\Langfuse\Contracts\EventBatcherInterface;
 use Axyr\Langfuse\Dto\EventBody;
 use Axyr\Langfuse\Dto\GenerationBody;
-use Axyr\Langfuse\Dto\IngestionEvent;
+use Axyr\Langfuse\Dto\IdGenerator;
 use Axyr\Langfuse\Dto\ScoreBody;
 use Axyr\Langfuse\Dto\SpanBody;
 use Axyr\Langfuse\Dto\TraceBody;
-use Axyr\Langfuse\Enums\EventType;
+use Axyr\Langfuse\Enums\ObservationType;
 use Axyr\Langfuse\Objects\LangfuseGeneration;
 use Axyr\Langfuse\Objects\LangfuseSpan;
 use Axyr\Langfuse\Objects\LangfuseTrace;
+use Axyr\Langfuse\Objects\OpenObservationRegistry;
 use Axyr\Langfuse\Testing\RecordingEventBatcher;
+use Axyr\Langfuse\Tracing\CompletedObservation;
+use Illuminate\Support\Facades\Log;
 
-it('enqueues trace-create event on construction', function () {
-    $batcher = Mockery::mock(EventBatcherInterface::class);
-    $batcher->shouldReceive('enqueue')
-        ->once()
-        ->with(Mockery::on(function (IngestionEvent $event) {
-            return $event->type === EventType::TraceCreate
-                && $event->body instanceof TraceBody
-                && $event->body->id === 'trace-1';
-        }));
-
-    new LangfuseTrace(
-        body: new TraceBody(id: 'trace-1', name: 'test'),
+function traceOn(RecordingEventBatcher $batcher, ?TraceBody $body = null, ?OpenObservationRegistry $registry = null): LangfuseTrace
+{
+    return new LangfuseTrace(
+        body: $body ?? new TraceBody(id: 'trace-1'),
         batcher: $batcher,
+        registry: $registry,
     );
+}
+
+it('sends nothing when the trace is created', function () {
+    $batcher = new RecordingEventBatcher();
+
+    traceOn($batcher, new TraceBody(id: 'trace-1', name: 'test'));
+
+    expect($batcher->observations())->toBeEmpty()
+        ->and($batcher->count())->toBe(0);
 });
 
-it('exposes trace id', function () {
-    $trace = new LangfuseTrace(
-        body: new TraceBody(id: 'trace-1'),
-        batcher: new NullEventBatcher(),
-    );
+it('exposes the normalised trace id and a separate root observation id', function () {
+    $trace = traceOn(new RecordingEventBatcher());
 
-    expect($trace->getId())->toBe('trace-1');
+    expect($trace->getId())->toBe(IdGenerator::traceIdFromSeed('trace-1'))
+        ->and($trace->getRootObservationId())->toMatch('/^[0-9a-f]{16}$/');
 });
 
-it('creates child span with correct trace id', function () {
-    $batcher = Mockery::mock(EventBatcherInterface::class);
-    $batcher->shouldReceive('enqueue')->twice(); // trace + span
+it('exports the root span once when the trace ends', function () {
+    $batcher = new RecordingEventBatcher();
+    $trace = traceOn($batcher, new TraceBody(id: 'trace-1', name: 'checkout', input: 'question'));
 
-    $trace = new LangfuseTrace(
-        body: new TraceBody(id: 'trace-1'),
-        batcher: $batcher,
-    );
+    $trace->end(endTime: '2024-01-01T00:00:05Z', output: 'answer');
 
-    $span = $trace->span(new SpanBody(id: 'span-1', name: 'child-span'));
+    expect($batcher->observations())->toHaveCount(1);
 
-    expect($span)->toBeInstanceOf(LangfuseSpan::class);
+    $root = $batcher->observations()[0];
+
+    expect($root->isRoot())->toBeTrue()
+        ->and($root->traceId())->toBe($trace->getId())
+        ->and($root->observationId())->toBe($trace->getRootObservationId())
+        ->and($root->parentId())->toBeNull()
+        ->and($root->name())->toBe('checkout')
+        ->and($root->type())->toBe(ObservationType::Span)
+        ->and($root->endTime)->toBe('2024-01-01T00:00:05Z')
+        ->and($root->body->output)->toBe('answer');
 });
 
-it('creates child generation with correct trace id', function () {
-    $batcher = Mockery::mock(EventBatcherInterface::class);
-    $batcher->shouldReceive('enqueue')->twice(); // trace + generation
+it('warns and does nothing when a trace ends twice', function () {
+    Log::shouldReceive('warning')->once()->with('Langfuse trace ended twice', Mockery::any());
 
-    $trace = new LangfuseTrace(
-        body: new TraceBody(id: 'trace-1'),
-        batcher: $batcher,
-    );
+    $batcher = new RecordingEventBatcher();
+    $trace = traceOn($batcher);
 
-    $gen = $trace->generation(new GenerationBody(id: 'gen-1', model: 'gpt-4'));
+    $trace->end();
+    $trace->end();
 
-    expect($gen)->toBeInstanceOf(LangfuseGeneration::class);
+    expect($batcher->observations())->toHaveCount(1);
 });
 
-it('creates child event with correct trace id', function () {
-    $batcher = Mockery::mock(EventBatcherInterface::class);
-    $batcher->shouldReceive('enqueue')
-        ->twice() // trace + event
-        ->with(Mockery::on(function (IngestionEvent $event) {
-            if ($event->type === EventType::EventCreate) {
-                return $event->body instanceof EventBody
-                    && $event->body->traceId === 'trace-1';
-            }
+it('warns and ignores an update after the trace ended', function () {
+    Log::shouldReceive('warning')->once()->with('Langfuse trace updated after it ended', Mockery::any());
 
-            return true;
-        }));
+    $batcher = new RecordingEventBatcher();
+    $trace = traceOn($batcher, new TraceBody(id: 'trace-1', name: 'original'));
 
-    $trace = new LangfuseTrace(
-        body: new TraceBody(id: 'trace-1'),
-        batcher: $batcher,
-    );
+    $trace->end();
+    $trace->update(new TraceBody(name: 'renamed'));
 
-    $trace->event(new EventBody(id: 'event-1', name: 'child-event'));
+    expect($batcher->observations()[0]->body->name)->toBe('original');
 });
 
-it('enqueues trace-create event with same id on update', function () {
-    $batcher = Mockery::mock(EventBatcherInterface::class);
-    $batcher->shouldReceive('enqueue')
-        ->twice() // initial create + update
-        ->with(Mockery::on(function (IngestionEvent $event) {
-            return $event->type === EventType::TraceCreate
-                && $event->body instanceof TraceBody
-                && $event->body->id === 'trace-1';
-        }));
+it('merges an update into the in-memory trace without sending anything', function () {
+    $batcher = new RecordingEventBatcher();
+    $trace = traceOn($batcher, new TraceBody(id: 'trace-1', name: 'original', metadata: ['source' => 'test']));
 
-    $trace = new LangfuseTrace(
-        body: new TraceBody(id: 'trace-1', name: 'original'),
-        batcher: $batcher,
-    );
+    $trace->update(new TraceBody(userId: 'user-1', output: 'result', metadata: ['step' => 2]));
 
-    $trace->update(new TraceBody(output: 'final result', metadata: ['key' => 'value']));
+    expect($batcher->observations())->toBeEmpty();
+
+    $trace->end();
+
+    $body = $batcher->observations()[0]->body;
+
+    expect($body->name)->toBe('original')
+        ->and($body->userId)->toBe('user-1')
+        ->and($body->output)->toBe('result')
+        ->and($body->metadata)->toBe(['source' => 'test', 'step' => 2]);
 });
 
-it('preserves trace id on update ignoring body id', function () {
-    $events = [];
-    $batcher = Mockery::mock(EventBatcherInterface::class);
-    $batcher->shouldReceive('enqueue')
-        ->twice()
-        ->with(Mockery::on(function (IngestionEvent $event) use (&$events) {
-            $events[] = $event;
-
-            return true;
-        }));
-
-    $trace = new LangfuseTrace(
-        body: new TraceBody(id: 'trace-1', name: 'original'),
-        batcher: $batcher,
-    );
+it('preserves the trace id and timestamp on update', function () {
+    $batcher = new RecordingEventBatcher();
+    $trace = traceOn($batcher, new TraceBody(id: 'trace-1', timestamp: '2024-01-01T00:00:00Z'));
 
     $trace->update(new TraceBody(id: 'ignored-id', output: 'result'));
+    $trace->end();
 
-    expect($events[1]->body->id)->toBe('trace-1')
-        ->and($events[1]->body->output)->toBe('result');
+    $body = $batcher->observations()[0]->body;
+
+    expect($body->id)->toBe($trace->getId())
+        ->and($body->timestamp)->toBe('2024-01-01T00:00:00Z')
+        ->and($body->output)->toBe('result');
 });
 
-it('creates score referencing the trace', function () {
-    $batcher = Mockery::mock(EventBatcherInterface::class);
-    $batcher->shouldReceive('enqueue')
-        ->twice() // trace + score
-        ->with(Mockery::on(function (IngestionEvent $event) {
-            if ($event->type === EventType::ScoreCreate) {
-                return $event->body instanceof ScoreBody
-                    && $event->body->traceId === 'trace-1';
-            }
+it('nests children under the root observation', function () {
+    $batcher = new RecordingEventBatcher();
+    $trace = traceOn($batcher);
 
-            return true;
-        }));
+    $span = $trace->span(new SpanBody(name: 'child-span'));
+    $generation = $trace->generation(new GenerationBody(name: 'child-generation'));
 
-    $trace = new LangfuseTrace(
-        body: new TraceBody(id: 'trace-1'),
-        batcher: $batcher,
-    );
+    expect($span)->toBeInstanceOf(LangfuseSpan::class)
+        ->and($generation)->toBeInstanceOf(LangfuseGeneration::class)
+        ->and($span->getBody()->parentObservationId)->toBe($trace->getRootObservationId())
+        ->and($span->getBody()->traceId)->toBe($trace->getId())
+        ->and($generation->getBody()->parentObservationId)->toBe($trace->getRootObservationId())
+        ->and($generation->getBody()->traceId)->toBe($trace->getId());
+});
+
+it('leaves an explicitly chosen parent alone', function () {
+    $batcher = new RecordingEventBatcher();
+    $trace = traceOn($batcher);
+    $parentId = '9999999999999999';
+
+    $span = $trace->span(new SpanBody(parentObservationId: $parentId));
+
+    expect($span->getBody()->parentObservationId)->toBe($parentId);
+});
+
+it('exports an event immediately with equal start and end times', function () {
+    $batcher = new RecordingEventBatcher();
+    $trace = traceOn($batcher);
+
+    $trace->event(new EventBody(name: 'child-event', startTime: '2024-01-01T00:00:00Z'));
+
+    $observations = $batcher->observationsOfType(ObservationType::Event);
+
+    expect($observations)->toHaveCount(1)
+        ->and($observations[0]->traceId())->toBe($trace->getId())
+        ->and($observations[0]->parentId())->toBe($trace->getRootObservationId())
+        ->and($observations[0]->startTime)->toBe('2024-01-01T00:00:00Z')
+        ->and($observations[0]->endTime)->toBe('2024-01-01T00:00:00Z');
+});
+
+it('creates a score referencing the trace', function () {
+    $batcher = new RecordingEventBatcher();
+    $trace = traceOn($batcher);
 
     $trace->score(new ScoreBody(id: 'score-1', name: 'accuracy'));
+
+    expect($batcher->scores())->toHaveCount(1)
+        ->and($batcher->scores()[0]->traceId)->toBe($trace->getId());
 });
 
 it('propagates the trace environment to child observations and scores', function () {
     $batcher = new RecordingEventBatcher();
-    $trace = new LangfuseTrace(
-        body: new TraceBody(id: 'trace-1', environment: 'staging'),
-        batcher: $batcher,
-    );
+    $trace = traceOn($batcher, new TraceBody(id: 'trace-1', environment: 'staging'));
 
-    $trace->span(new SpanBody(id: 'span-1'));
-    $trace->generation(new GenerationBody(id: 'gen-1'));
-    $trace->event(new EventBody(id: 'evt-1'));
+    $span = $trace->span(new SpanBody(name: 'span'));
+    $generation = $trace->generation(new GenerationBody(name: 'gen'));
+    $trace->event(new EventBody(name: 'evt'));
     $trace->score(new ScoreBody(name: 'accuracy', value: 1.0));
-    $trace->update(new TraceBody(name: 'updated'));
 
-    $environments = array_map(
-        fn(IngestionEvent $event): ?string => $event->toArray()['body']['environment'] ?? null,
-        $batcher->events(),
-    );
-
-    expect($environments)->toBe(['staging', 'staging', 'staging', 'staging', 'staging', 'staging']);
+    expect($span->getBody()->environment)->toBe('staging')
+        ->and($generation->getBody()->environment)->toBe('staging')
+        ->and($batcher->observations()[0]->body->environment)->toBe('staging')
+        ->and($batcher->scores()[0]->environment)->toBe('staging');
 });
 
 it('keeps an explicit child environment over the trace environment', function () {
     $batcher = new RecordingEventBatcher();
-    $trace = new LangfuseTrace(
-        body: new TraceBody(id: 'trace-1', environment: 'staging'),
-        batcher: $batcher,
-    );
+    $trace = traceOn($batcher, new TraceBody(id: 'trace-1', environment: 'staging'));
 
-    $trace->generation(new GenerationBody(id: 'gen-1', environment: 'production'));
+    $generation = $trace->generation(new GenerationBody(environment: 'production'));
 
-    expect($batcher->events()[1]->toArray()['body']['environment'])->toBe('production');
+    expect($generation->getBody()->environment)->toBe('production');
 });
 
 it('leaves children without environment when the trace has none', function () {
     $batcher = new RecordingEventBatcher();
-    $trace = new LangfuseTrace(body: new TraceBody(id: 'trace-1'), batcher: $batcher);
+    $trace = traceOn($batcher);
 
-    $trace->generation(new GenerationBody(id: 'gen-1'));
-
-    expect($batcher->events()[1]->toArray()['body'])->not->toHaveKey('environment');
+    expect($trace->generation(new GenerationBody())->getBody()->environment)->toBeNull();
 });
 
-it('keeps the original timestamp on update', function () {
+it('registers itself and unregisters when it ends', function () {
+    $registry = new OpenObservationRegistry();
     $batcher = new RecordingEventBatcher();
-    $trace = new LangfuseTrace(
-        body: new TraceBody(id: 'trace-1', timestamp: '2024-01-01T00:00:00Z'),
-        batcher: $batcher,
-    );
 
-    $trace->update(new TraceBody(output: 'done'));
+    $trace = traceOn($batcher, null, $registry);
 
-    expect($batcher->events()[1]->toArray()['body']['timestamp'])->toBe('2024-01-01T00:00:00Z');
+    expect($registry->count())->toBe(1)
+        ->and($trace->hasEnded())->toBeFalse();
+
+    $trace->end();
+
+    expect($registry->count())->toBe(0)
+        ->and($trace->hasEnded())->toBeTrue()
+        ->and($registry->all())->toHaveCount(1);
+});
+
+it('shares one trace context with its children', function () {
+    $batcher = new RecordingEventBatcher();
+    $trace = traceOn($batcher);
+
+    $span = $trace->span(new SpanBody(name: 'child'));
+    $trace->update(new TraceBody(userId: 'user-late'));
+    $span->end();
+
+    /** @var CompletedObservation $exported */
+    $exported = $batcher->observations()[0];
+
+    expect($exported->context->body()->userId)->toBe('user-late');
 });

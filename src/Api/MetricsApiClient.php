@@ -35,7 +35,7 @@ class MetricsApiClient implements MetricsApiClientInterface
             'Content-Type' => 'application/json',
         ])
             ->timeout($this->config->requestTimeout)
-            ->get($this->config->metricsUrl(), [
+            ->get($this->config->metricsV2Url(), [
                 'query' => json_encode($query->toArray(), JSON_THROW_ON_ERROR),
             ]);
 

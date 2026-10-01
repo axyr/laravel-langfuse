@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Axyr\Langfuse\Objects;
 
+use Axyr\Langfuse\Dto\GenerationBody;
 use Axyr\Langfuse\Dto\Usage;
 use Axyr\Langfuse\Enums\ObservationLevel;
 
@@ -21,6 +22,16 @@ class NullLangfuseGeneration extends LangfuseGeneration
         return null;
     }
 
+    public function getBody(): GenerationBody
+    {
+        return new GenerationBody();
+    }
+
+    public function hasEnded(): bool
+    {
+        return true;
+    }
+
     public function end(
         ?string $endTime = null,
         mixed $output = null,
@@ -28,4 +39,6 @@ class NullLangfuseGeneration extends LangfuseGeneration
         ?string $statusMessage = null,
         ?ObservationLevel $level = null,
     ): void {}
+
+    public function endOnShutdown(): void {}
 }

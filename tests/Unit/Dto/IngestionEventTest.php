@@ -3,29 +3,29 @@
 declare(strict_types=1);
 
 use Axyr\Langfuse\Dto\IngestionEvent;
-use Axyr\Langfuse\Dto\TraceBody;
+use Axyr\Langfuse\Dto\ScoreBody;
 use Axyr\Langfuse\Enums\EventType;
 
 it('can be constructed', function () {
-    $body = new TraceBody(id: 'trace-1', name: 'test');
+    $body = new ScoreBody(name: 'accuracy', id: 'score-1', value: 1.0);
     $event = new IngestionEvent(
         id: 'evt-1',
-        type: EventType::TraceCreate,
+        type: EventType::ScoreCreate,
         timestamp: '2024-01-01T00:00:00Z',
         body: $body,
     );
 
     expect($event->id)->toBe('evt-1')
-        ->and($event->type)->toBe(EventType::TraceCreate)
+        ->and($event->type)->toBe(EventType::ScoreCreate)
         ->and($event->timestamp)->toBe('2024-01-01T00:00:00Z')
         ->and($event->body)->toBe($body);
 });
 
 it('serializes to array with type as string', function () {
-    $body = new TraceBody(id: 'trace-1', name: 'test', timestamp: '2024-01-01T00:00:00Z');
+    $body = new ScoreBody(name: 'accuracy', id: 'score-1', value: 1.0);
     $event = new IngestionEvent(
         id: 'evt-1',
-        type: EventType::TraceCreate,
+        type: EventType::ScoreCreate,
         timestamp: '2024-01-01T00:00:00Z',
         body: $body,
     );
@@ -34,20 +34,20 @@ it('serializes to array with type as string', function () {
 
     expect($array)->toBe([
         'id' => 'evt-1',
-        'type' => 'trace-create',
+        'type' => 'score-create',
         'timestamp' => '2024-01-01T00:00:00Z',
-        'body' => ['id' => 'trace-1', 'timestamp' => '2024-01-01T00:00:00Z', 'name' => 'test'],
+        'body' => ['id' => 'score-1', 'name' => 'accuracy', 'value' => 1.0],
     ]);
 });
 
 it('serializes body via its toArray method', function () {
-    $body = new TraceBody(id: 'trace-1', timestamp: '2024-01-01T00:00:00Z');
+    $body = new ScoreBody(name: 'accuracy', id: 'score-1');
     $event = new IngestionEvent(
         id: 'evt-1',
-        type: EventType::TraceCreate,
+        type: EventType::ScoreCreate,
         timestamp: '2024-01-01T00:00:00Z',
         body: $body,
     );
 
-    expect($event->toArray()['body'])->toBe(['id' => 'trace-1', 'timestamp' => '2024-01-01T00:00:00Z']);
+    expect($event->toArray()['body'])->toBe(['id' => 'score-1', 'name' => 'accuracy']);
 });

@@ -75,15 +75,16 @@ it('dispatches events through subscriber when enabled', function () {
         ),
     ));
 
-    // Should have trace-create, generation-create, generation-update
-    $types = array_map(
-        fn(\Axyr\Langfuse\Dto\IngestionEvent $e) => $e->type->value,
-        $batcher->events(),
+    // The owned trace and its generation are both exported once, when they end.
+    $names = array_map(
+        fn(\Axyr\Langfuse\Tracing\CompletedObservation $o): string => $o->name(),
+        $batcher->observations(),
     );
 
-    expect($types)->toContain('trace-create')
-        ->and($types)->toContain('generation-create')
-        ->and($types)->toContain('generation-update');
+    expect($names)->toHaveCount(2)
+        ->and($names[0])->toBe('gpt-4')
+        ->and($names[1])->toStartWith('laravel-ai-')
+        ->and($batcher->observationsOfType(\Axyr\Langfuse\Enums\ObservationType::Generation))->toHaveCount(1);
 });
 
 it('dispatches tool events through subscriber', function () {
@@ -139,12 +140,9 @@ it('dispatches tool events through subscriber', function () {
         result: 'Search results here',
     ));
 
-    $types = array_map(
-        fn(\Axyr\Langfuse\Dto\IngestionEvent $e) => $e->type->value,
-        $batcher->events(),
-    );
+    $spans = $batcher->observationsOfType(\Axyr\Langfuse\Enums\ObservationType::Tool);
 
-    expect($types)->toContain('trace-create')
-        ->and($types)->toContain('span-create')
-        ->and($types)->toContain('span-update');
+    expect($spans)->toHaveCount(1)
+        ->and($spans[0]->name())->toStartWith('tool-')
+        ->and($spans[0]->body->output)->toBe('Search results here');
 });
