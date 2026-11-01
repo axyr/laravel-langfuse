@@ -194,6 +194,31 @@ it('captures usage data in generation', function () {
         ->and($body['usage']['total'])->toBe(40);
 });
 
+it('captures laravel ai 1.x usage data in generation', function () {
+    $fake = makeLangfuseClient();
+    $subscriber = makeSubscriber($fake);
+    $prompt = makeAgentPrompt();
+
+    $usage = new class () extends Usage {
+        public int $inputTokens = 15;
+
+        public int $outputTokens = 25;
+    };
+
+    $subscriber->handlePromptingAgent(new PromptingAgent(invocationId: 'inv-1', prompt: $prompt));
+    $subscriber->handleAgentPrompted(new AgentPrompted(
+        invocationId: 'inv-1',
+        prompt: $prompt,
+        response: new AgentResponse(invocationId: 'inv-1', text: 'Hello world', usage: $usage, meta: new Meta(provider: 'openai', model: 'gpt-4')),
+    ));
+
+    $body = generationBodies($fake)[0];
+
+    expect($body['usage']['input'])->toBe(15)
+        ->and($body['usage']['output'])->toBe(25)
+        ->and($body['usage']['total'])->toBe(40);
+});
+
 it('captures model name from response meta', function () {
     $fake = makeLangfuseClient();
     $subscriber = makeSubscriber($fake);

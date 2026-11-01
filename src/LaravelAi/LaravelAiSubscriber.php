@@ -259,10 +259,13 @@ class LaravelAiSubscriber
 
     private function mapUsage(\Laravel\Ai\Responses\Data\Usage $usage): Usage
     {
+        $input = $usage->inputTokens ?? $usage->promptTokens;
+        $output = $usage->outputTokens ?? $usage->completionTokens;
+
         return new Usage(
-            input: $usage->promptTokens,
-            output: $usage->completionTokens,
-            total: $usage->promptTokens + $usage->completionTokens,
+            input: $input,
+            output: $output,
+            total: $input + $output,
         );
     }
 
